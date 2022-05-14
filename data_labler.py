@@ -1,5 +1,3 @@
-from random import sample
-from turtle import right
 import cv2
 import numpy as np
 from datetime import datetime
