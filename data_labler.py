@@ -1,8 +1,7 @@
 import cv2
-import numpy as np
-from datetime import datetime
 import os
 from math import atan2, cos, sin
+from draw_horizon import draw_horizon
 
 # settings
 view_unlabeled = True
@@ -34,24 +33,22 @@ class SampleImage:
         self.deleted = False
     
     def update(self, x, y):
-        img_width = self.img.shape[0]
         if self.pt1 is None:
-            curr_img_object.pt1 = (x/img_width, y/img_width)
+            self.pt1 = (x, y)
         elif self.pt1 is not None:
-            self.pt2 = (x/img_width, y/img_width)
+            self.pt2 = (x, y)
 
         if self.pt1 is not None and self.pt2 is not None:
             self.angle = atan2((self.pt2[1] - self.pt1[1]), (self.pt2[0] - self.pt1[0]))
-            self.offset = 1
+            if self.angle < 0: # prevent any negative values from being saved
+                self.angle += 6.28319
             m = (self.pt2[1] - self.pt1[1]) / (self.pt2[0] - self.pt1[0])
             b = self.pt1[1] - m * self.pt1[0]
-            self.offset = .5 * m + b
+            self.offset = (m * self.img.shape[1]//2 + b) / self.img.shape[0]
             if self.pt1[0] < self.pt2[0]:
                 self.sky_is_up = 1
             else:
                 self.sky_is_up = 0
-
-            self.reconstruct_pt1_and_pt2()
             self.labeled = True
 
     def restore_from_save(self, angle, offset, sky_is_up):
@@ -71,16 +68,16 @@ class SampleImage:
         
     def reconstruct_pt1_and_pt2(self):
         """
-        Extends pt1 and pt2 to the left and right edges of the
-        frame respectively.
-        This is done to better draw the horizon line.
+        Rebuild pt1 and pt2 based on the angle and offset.
+        pt1 and pt2 are necessary for drawing the line, but they don't
+        exist in label.txt, so they must be reconstructed.
         """
         x = cos(self.angle)
         y = sin(self.angle) 
         m = y / x
         b = self.offset - m * .5
         self.pt1 = (0, b)
-        self.pt2 = (self.img.shape[0], (m * self.img.shape[0] + b))
+        self.pt2 = (self.img.shape[1], (m * self.img.shape[1] + b))
 
     def clear(self):
         self.pt1 = None
@@ -142,13 +139,18 @@ def click_event(event, x, y, flags, param):
         curr_img_object.clear()
 
     if curr_img_object.pt1 is not None and curr_img_object.pt2 is not None:
-        # save changes
-        with open(label_filepath, 'w') as f:
-            for img in sample_image_list:
-                if img.deleted:
-                    pass
-                else:
-                    f.write(f"{img.file_name},{img.angle},{img.offset},{img.sky_is_up}\n")
+        save_changes(sample_image_list)
+
+def save_changes(sample_image_list):
+    """
+    Saves changes to labels.txt
+    """
+    with open(label_filepath, 'w') as f:
+        for img in sample_image_list:
+            if img.deleted:
+                pass
+            else:
+                f.write(f"{img.file_name},{img.angle},{img.offset},{img.sky_is_up}\n")
 
 # define list of SampleImage objects
 training_data_dir = "training_data/" + input("Enter name of folder containing training data: ")
@@ -197,30 +199,11 @@ while True:
 
     img_to_display = curr_img.copy()
     if curr_img_object.pt1 is not None and curr_img_object.pt2 is not None:
-        # draw sky and ground
-        height = curr_img_object.img.shape[0]
-        width = curr_img_object.img.shape[1]
-        line_width = int(curr_img_object.img.shape[0] * .03)
-        if curr_img_object.sky_is_up == 1:
-            line_1_color = (255,0,0)
-            line_2_color = (0,255,0)
-        elif curr_img_object.sky_is_up == 0:
-            line_1_color = (0,255,0)
-            line_2_color = (255,0,0)
-        
-        # draw top line
-        pt1 = (0, 0)
-        pt2 = (width, 0)
-        cv2.line(img_to_display, pt1, pt2, line_1_color,line_width)
-        # draw bottom line
-        pt1 = (0, height)
-        pt2 = (height, width)
-        cv2.line(img_to_display, pt1, pt2, line_2_color,line_width)
-
         # draw horizon
-        pt1 = (int(curr_img_object.pt1[0] * curr_img.shape[0]), int(curr_img_object.pt1[1] * curr_img.shape[0]))
-        pt2 = (int(curr_img_object.pt2[0] * curr_img.shape[0]), int(curr_img_object.pt2[1] * curr_img.shape[0]))
-        cv2.line(img_to_display, pt1, pt2, (0,0,255),2)
+        angle = curr_img_object.angle
+        offset = curr_img_object.offset
+        sky_is_up = curr_img_object.sky_is_up
+        img_to_display = draw_horizon(img_to_display, angle, offset, sky_is_up)
 
     # draw "Marked for deletion" text
     if curr_img_object.deleted:
@@ -265,5 +248,8 @@ for sample_img_object in sample_image_list:
         print(f'{sample_img_object.file_path} deleted.')
     else:
         pass
+
+# save changes one more time for good measure
+save_changes(sample_image_list)
 
 cv2.destroyAllWindows()

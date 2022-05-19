@@ -2,26 +2,28 @@ import cv2
 import numpy as np
 from datetime import datetime
 import os
-import random
 
 def extract_training_images():
     # globals
-    number_of_images = 300
-    desired_height = 500 # for image scaling
+    number_of_images = 20
+    desired_height = 100 # for image scaling
 
     # get the datetime for the output file name
     now = datetime.now()
     dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
 
+    folder_path = "C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/"
+
     # take a list of videos
-    video_list = ["C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/2022.02.20.07.57.08.avi",
-                    "C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/2022.02.20.07.58.10.avi",
-                    "C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/2022.02.20.07.57.08_upside_down.avi"]
+    video_list = ["2022.02.20.07.57.08.avi",
+                "2022.02.20.07.58.10.avi",
+                "2022.02.20.07.57.08_upside_down.avi"]
 
     # check that all video links are valid and can be read
     print("Checking videos...")
-    for video in video_list:
-        cap = cv2.VideoCapture(video)
+    for video_name in video_list:
+        video_path = folder_path + video_name
+        cap = cv2.VideoCapture(video_path)
         try:
             ret, frame = cap.read()
         except:
@@ -29,7 +31,7 @@ def extract_training_images():
         if ret:
             pass
         else:
-            print(f'{video} is not a valid path to the video, or the video cannot be read. Please double check.')
+            print(f'{video_path} is not a valid path to the video, or the video cannot be read. Please double check.')
             return # end the whole function if any of the videos cannot be read
 
     print("All videos are valid.")
@@ -41,8 +43,9 @@ def extract_training_images():
     # count the total number of frames in all videos
     print("Counting the number of frames in all videos...")
     total_number_of_frames=0
-    for video in video_list:
-        cap = cv2.VideoCapture(video)
+    for video_path in video_list:
+        video_path = folder_path + video_name
+        cap = cv2.VideoCapture(video_path)
         while True:
             ret, frame = cap.read()
             if ret:
@@ -56,14 +59,17 @@ def extract_training_images():
     # we will take every nth frame from the videos to yield a certain number of images
     # for this, we will define average_step_size
     step_size = total_number_of_frames // number_of_images
-    print(f'average_step_size: {step_size}')
+    print(f'step_size: {step_size}')
 
     # start looping over the videos and saving images
-    n=0
-    image_number = 0
-    for video in video_list:
+    n = 0 # an overall counter for each frame across all videos
+    frame_count = 0 # used to count the total number of frames extracted
+    for video_name in video_list:
+        frame_number = 0 # frame number within this specific video
+        video_path = folder_path + video_name
+        video_file_basename = '.'.join(video_name.split(".")[:-1])
         # define the video capture object
-        cap = cv2.VideoCapture(video)
+        cap = cv2.VideoCapture(video_path)
 
         # get the first frame so we can define some variables based on it
         ret, frame = cap.read()
@@ -91,13 +97,14 @@ def extract_training_images():
                 frame = frame[:,start:end]
                 # resize the image
                 frame = cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
-                cv2.imwrite(f"{training_data_path}/{image_number}.png",frame)
-                image_number += 1
-
-            n+=1
+                cv2.imwrite(f"{training_data_path}/{video_file_basename}_{frame_number}.png",frame)
+                frame_count += 1
+            
+            frame_number += 1
+            n += 1
 
     cap.release()
-    print(f"Done! {image_number} images extracted.")
+    print(f"Done! {frame_count} images extracted.")
 
 if __name__ == "__main__":
     extract_training_images()
