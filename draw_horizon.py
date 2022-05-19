@@ -39,10 +39,7 @@ def draw_horizon(frame, angle, offset_normalized, sky_is_up):
     return frame
 
 if __name__ == "__main__":
-    path = 'training_data/sample_images/2022.02.20.07.57.08_630.png'
-    angle = 0.14514379644254055
-    offset = 0.6491461716937355
-
+    # Demonstration
     path = 'training_data/sample_images/sample_horizon.png'
     angle = 0.5478363265396572
     offset = 0.279784140969163

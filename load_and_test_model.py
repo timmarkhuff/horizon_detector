@@ -3,8 +3,15 @@ import cv2
 import numpy as np
 import random
 from math import cos, sin
+from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
+from find_horizon import find_horizon
+from draw_horizon import draw_horizon
 
 def load_and_test_model():
+    # globals
+    DESIRED_WIDTH = 100
+    DESIRED_HEIGHT = 100
+
     # load the model
     print("Loading model...")
     model = load_model('model_2022.05.18.00.00.00')
@@ -25,34 +32,18 @@ def load_and_test_model():
         print("Could not read video.")
         return 
 
-    # define some variables related to cropping
-    height = frame.shape[0]
-    width = frame.shape[1]
-    diff = width - height
-    start = diff//2
-    end = start + height
-    frame = frame[:,start:end]
-    # define some variables related to scaling
-    desired_height = 100 # for image scaling
-    scale_factor = desired_height / frame.shape[0]
-    frame = cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
-    print(f"frame.shape: {frame.shape}")
-
-    # Define some variables relatd to text
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    org = (50, 50)
-    fontScale = 1
-    thickness = 2
+    # get some parameters for cropping and scaling
+    cropping_start, cropping_end, scale_factor = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
+    if cropping_start is None:
+        return
     
     while True:
         ret, frame = cap.read()
         if ret == False:
             break
 
-        # crop the image
-        scaled_and_cropped_frame = frame[:,start:end]
-        # resize the image
-        scaled_and_cropped_frame = cv2.resize(scaled_and_cropped_frame, (0, 0), fx=scale_factor, fy=scale_factor)
+        # crop and scale the image
+        scaled_and_cropped_frame = crop_and_scale(frame, cropping_start, cropping_end, scale_factor)
 
         # normalize frame
         preprocessed_frame = scaled_and_cropped_frame/255
@@ -63,35 +54,14 @@ def load_and_test_model():
         # make prediction
         raw_prediction = model.predict(preprocessed_frame)
         if raw_prediction[0][0]> raw_prediction[0][1]:
-            text = "Upside Down"
-            color = (255,0,0)
+            sky_is_up = 0
         else:
-            text = "Right Side Up"
-            color = (0,255,0)
-
-        frame = cv2.putText(frame, text, org, font, 
-                    fontScale, color, thickness, cv2.LINE_AA)
+            sky_is_up = 1
+        angle, offset, _ = find_horizon(scaled_and_cropped_frame)
 
         # draw horizon
-        angle = 0
-        offset_normalized = .5
-        offset = np.round(offset_normalized * frame.shape[0])
-        x = cos(angle)
-        y = sin(angle) 
-        m = y / x
-        b = offset - m * .5
-        # find the points to be drawn
-        p1_x = 0
-        p1_y = int(np.round(b)) # round so that we get an integer
-        p1 = (p1_x, p1_y)
-        p2_x = frame.shape[1]
-        p2_y = int(np.round(m * frame.shape[1] + b))
-        p2 = (p2_x, p2_y)
-
-        # print(f'pt1 {p1}')
-        # print(f'pt2 {p2}')
-
-        frame = cv2.line(frame, p1, p2, (0,0,255), 2)
+        frame = draw_horizon(frame, angle, offset, sky_is_up)
+        scaled_and_cropped_frame = draw_horizon(scaled_and_cropped_frame, angle, offset, sky_is_up)
         
         cv2.imshow("Original Video", frame)
         cv2.imshow("Scaled and Cropped Video", scaled_and_cropped_frame)

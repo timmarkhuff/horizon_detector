@@ -2,19 +2,16 @@ import cv2
 import numpy as np
 from datetime import datetime
 import os
+from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 
 def extract_training_images():
     # globals
-    number_of_images = 20
-    desired_height = 100 # for image scaling
-
-    # get the datetime for the output file name
-    now = datetime.now()
-    dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
-
-    folder_path = "C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/"
+    NUMBER_OF_IMAGES = 40
+    DESIRED_HEIGHT = 100 # for image scaling
+    DESIRED_WIDTH = 150 
 
     # take a list of videos
+    folder_path = "C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/"
     video_list = ["2022.02.20.07.57.08.avi",
                 "2022.02.20.07.58.10.avi",
                 "2022.02.20.07.57.08_upside_down.avi"]
@@ -24,6 +21,8 @@ def extract_training_images():
     for video_name in video_list:
         video_path = folder_path + video_name
         cap = cv2.VideoCapture(video_path)
+
+        # check if a frame can be read
         try:
             ret, frame = cap.read()
         except:
@@ -34,11 +33,14 @@ def extract_training_images():
             print(f'{video_path} is not a valid path to the video, or the video cannot be read. Please double check.')
             return # end the whole function if any of the videos cannot be read
 
-    print("All videos are valid.")
+        # check desired width and desired height
+        _, _, _ = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
+        if _ is None:
+            # if the desired width and height are invalid and an 
+            # aspect ratio cannot be returned, terminate function early
+            return
 
-    # make a folder for the data
-    training_data_path = f'training_data/{dt_string}'
-    os.mkdir(training_data_path)
+    print("All videos are valid.")
 
     # count the total number of frames in all videos
     print("Counting the number of frames in all videos...")
@@ -58,8 +60,15 @@ def extract_training_images():
 
     # we will take every nth frame from the videos to yield a certain number of images
     # for this, we will define average_step_size
-    step_size = total_number_of_frames // number_of_images
+    step_size = total_number_of_frames // NUMBER_OF_IMAGES
     print(f'step_size: {step_size}')
+
+    # make a folder for the data
+    now = datetime.now()
+    dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
+    training_data_path = f'training_data/{dt_string}'
+    os.mkdir(training_data_path)
+    print(f'New folder {training_data_path} created.')
 
     # start looping over the videos and saving images
     n = 0 # an overall counter for each frame across all videos
@@ -70,20 +79,10 @@ def extract_training_images():
         video_file_basename = '.'.join(video_name.split(".")[:-1])
         # define the video capture object
         cap = cv2.VideoCapture(video_path)
-
         # get the first frame so we can define some variables based on it
         ret, frame = cap.read()
         # define some variables related to cropping
-        height = frame.shape[0]
-        width = frame.shape[1]
-        diff = width - height
-        start = diff//2
-        end = start + height
-        frame = frame[:,start:end]
-        # define some variables related to scaling
-        scale_factor = desired_height / frame.shape[0]
-        frame = cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
-        print(f"frame.shape: {frame.shape}")
+        cropping_start, cropping_end, scale_factor = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
 
         # begin saving images
         while True:
@@ -93,10 +92,7 @@ def extract_training_images():
                 break
 
             if n % step_size == 0:
-                # crop the image
-                frame = frame[:,start:end]
-                # resize the image
-                frame = cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
+                frame = crop_and_scale(frame, cropping_start, cropping_end, scale_factor)
                 cv2.imwrite(f"{training_data_path}/{video_file_basename}_{frame_number}.png",frame)
                 frame_count += 1
             
