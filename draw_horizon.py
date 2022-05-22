@@ -2,7 +2,17 @@ import cv2
 import numpy as np
 from math import cos, sin
 
-def draw_horizon(frame, angle, offset_normalized, sky_is_up):
+def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, sky_is_up: bool, good_horizon: bool):
+    # if no horizon data is provided, terminate function early and
+    # return provided frame
+    if angle is None:
+        return frame
+    
+    if good_horizon:
+        horizon_color = (255,0,0)
+    else:
+        horizon_color = (0,0,255)
+
     # draw sky and ground lines
     height = frame.shape[0]
     width = frame.shape[1]
@@ -35,7 +45,7 @@ def draw_horizon(frame, angle, offset_normalized, sky_is_up):
     p2_x = frame.shape[1]
     p2_y = int(np.round(m * frame.shape[1] + b))
     p2 = (p2_x, p2_y)
-    frame = cv2.line(frame, p1, p2, (0,0,255), 2)
+    frame = cv2.line(frame, p1, p2, horizon_color, 2)
     return frame
 
 if __name__ == "__main__":

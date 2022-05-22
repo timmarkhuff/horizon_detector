@@ -1,8 +1,5 @@
 from tensorflow.keras.models import load_model
 import cv2
-import numpy as np
-import random
-from math import cos, sin
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import find_horizon
 from draw_horizon import draw_horizon
@@ -12,15 +9,16 @@ def load_and_test_model():
     DESIRED_WIDTH = 100
     DESIRED_HEIGHT = 100
 
-    # load the model
-    print("Loading model...")
-    model = load_model('model_2022.05.18.00.00.00')
+    # # load the model
+    # print("Loading model...")
+    # model = load_model('model_2022.05.18.00.00.00')
 
-    # get a summary of the model
-    print(model.summary())
+    # # get a summary of the model
+    # print(model.summary())
 
     # define the video capture object
     video_path = "videos/upside_down_and_rightside_up.mp4"
+    # video_path = 'C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca1.29.2022/2022.01.29.11.52.05.avi'
     cap = cv2.VideoCapture(video_path)
 
     # get the first frame so we can define some variables based on it
@@ -33,9 +31,15 @@ def load_and_test_model():
         return 
 
     # get some parameters for cropping and scaling
-    cropping_start, cropping_end, scale_factor = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
-    if cropping_start is None:
+    crop_and_scale_parameters = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
+    scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
+    EXCLUSION_THRESH = scaled_and_cropped_frame.shape[1] * .075
+    if crop_and_scale_parameters is None:
         return
+
+    # initialize some values related to findng the horizon
+    previous_m = None
+    previous_b = None
     
     while True:
         ret, frame = cap.read()
@@ -43,30 +47,41 @@ def load_and_test_model():
             break
 
         # crop and scale the image
-        scaled_and_cropped_frame = crop_and_scale(frame, cropping_start, cropping_end, scale_factor)
+        scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
 
-        # normalize frame
-        preprocessed_frame = scaled_and_cropped_frame/255
+        # # normalize frame
+        # preprocessed_frame = scaled_and_cropped_frame/255
 
-        # reshape to the size the model wants
-        preprocessed_frame = preprocessed_frame.reshape(1,100,100,3)
+        # # reshape to the size the model wants
+        # preprocessed_frame = preprocessed_frame.reshape(1,100,100,3)
 
-        # make prediction
-        raw_prediction = model.predict(preprocessed_frame)
-        if raw_prediction[0][0]> raw_prediction[0][1]:
-            sky_is_up = 0
-        else:
-            sky_is_up = 1
-        angle, offset, _ = find_horizon(scaled_and_cropped_frame)
+        # # make prediction
+        # raw_prediction = model.predict(preprocessed_frame)
+        # if raw_prediction[0][0]> raw_prediction[0][1]:
+        #     sky_is_up = 0
+        # else:
+        #     sky_is_up = 1
+        
+        angle, offset, sky_is_up, variance, m, b = find_horizon(scaled_and_cropped_frame, previous_m, previous_b, EXCLUSION_THRESH)
 
+        # check the variance to determine if this is a good horizon
+        previous_m = None
+        previous_b = None
+        good_horizon = False
+        if variance is not None:
+            if variance < 2:
+                good_horizon = True
+                previous_m = m
+                previous_b = b
+                
         # draw horizon
-        frame = draw_horizon(frame, angle, offset, sky_is_up)
-        scaled_and_cropped_frame = draw_horizon(scaled_and_cropped_frame, angle, offset, sky_is_up)
+        frame = draw_horizon(frame, angle, offset, sky_is_up, good_horizon)
+        scaled_and_cropped_frame = draw_horizon(scaled_and_cropped_frame, angle, offset, sky_is_up, good_horizon)
         
         cv2.imshow("Original Video", frame)
         cv2.imshow("Scaled and Cropped Video", scaled_and_cropped_frame)
 
-        key = cv2.waitKey(1)
+        key = cv2.waitKey(30)
 
         if key == ord('q'):
             break
