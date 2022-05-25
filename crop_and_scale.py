@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
-        
-def get_cropping_and_scaling_parameters(frame: np.ndarray, desired_width: int, desired_height: int) -> dict:
-    new_aspect_ratio = desired_width / desired_height
-    original_aspect_ratio = frame.shape[1] / frame.shape[0]
+
+def get_cropping_and_scaling_parameters(original_resolution: tuple, new_resolution: int) -> dict:
+    new_aspect_ratio = new_resolution[0] / new_resolution[1]
+    original_aspect_ratio = original_resolution[0] / original_resolution[1]
 
     if new_aspect_ratio > original_aspect_ratio:
         print(f"Requested aspect ratio of {new_aspect_ratio} is wider than original aspect ratio of {original_aspect_ratio}. "\
@@ -11,14 +11,14 @@ def get_cropping_and_scaling_parameters(frame: np.ndarray, desired_width: int, d
         return None
 
     # define some variables related to cropping
-    height = frame.shape[0]
-    width = frame.shape[1]
+    height = original_resolution[1]
+    width = original_resolution[0]
     new_width = height * new_aspect_ratio
     margin = (width - new_width) // 2
     cropping_start = int(margin)
     cropping_end = int(width - margin)
     # define some variables related to scaling
-    scale_factor = desired_height / frame.shape[0]
+    scale_factor = new_resolution[1] / original_resolution[1]
     # convert to dictionary
     crop_and_scale_parameters = {}
     crop_and_scale_parameters['cropping_start'] = cropping_start
@@ -37,7 +37,10 @@ def crop_and_scale(frame, cropping_start, cropping_end, scale_factor):
 if __name__ == "__main__":
     path = 'training_data/sample_images/sample_horizon_corrected.png'
     input_frame = cv2.imread(path)
-    crop_and_scale_parameters = get_cropping_and_scaling_parameters(input_frame, 100, 100)
+    input_frame_resolution = input_frame.shape[1::-1]
+    print(input_frame_resolution)
+    desired_resolution = (100, 100)
+    crop_and_scale_parameters = get_cropping_and_scaling_parameters(input_frame_resolution, desired_resolution)
     output_frame = crop_and_scale(input_frame, **crop_and_scale_parameters)
     cv2.imshow("input_frame",input_frame)
     cv2.imshow("output_frame",output_frame)
