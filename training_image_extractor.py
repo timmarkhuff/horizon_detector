@@ -2,16 +2,17 @@ import cv2
 import numpy as np
 from datetime import datetime
 import os
+
+from pkg_resources import ResolutionError
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 
 def extract_training_images():
     # globals
-    NUMBER_OF_IMAGES = 40
-    DESIRED_HEIGHT = 100 # for image scaling
-    DESIRED_WIDTH = 150 
+    NUMBER_OF_IMAGES = 20
+    INFERENCE_RESOLUTION = (100, 100)# for image scaling
 
     # take a list of videos
-    folder_path = "C:/Users/Owner/Desktop/runway_detector (in progress)/produced_media/arca2.20.2022/"
+    folder_path = "C:/Users/Owner/Desktop/runway_detector_in_progress/produced_media/arca2.20.2022/"
     video_list = ["2022.02.20.07.57.08.avi",
                 "2022.02.20.07.58.10.avi",
                 "2022.02.20.07.57.08_upside_down.avi"]
@@ -25,6 +26,7 @@ def extract_training_images():
         # check if a frame can be read
         try:
             ret, frame = cap.read()
+            resolution = frame.shape[:2][::-1]
         except:
             ret = False
         if ret:
@@ -34,8 +36,8 @@ def extract_training_images():
             return # end the whole function if any of the videos cannot be read
 
         # check desired width and desired height
-        _, _, _ = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
-        if _ is None:
+        crop_and_scale_parameters = get_cropping_and_scaling_parameters(resolution, INFERENCE_RESOLUTION)
+        if crop_and_scale_parameters is None:
             # if the desired width and height are invalid and an 
             # aspect ratio cannot be returned, terminate function early
             return
@@ -82,7 +84,7 @@ def extract_training_images():
         # get the first frame so we can define some variables based on it
         ret, frame = cap.read()
         # define some variables related to cropping
-        cropping_start, cropping_end, scale_factor = get_cropping_and_scaling_parameters(frame, DESIRED_WIDTH, DESIRED_HEIGHT)
+        crop_and_scale_parameters = get_cropping_and_scaling_parameters(resolution, INFERENCE_RESOLUTION)
 
         # begin saving images
         while True:
@@ -92,7 +94,7 @@ def extract_training_images():
                 break
 
             if n % step_size == 0:
-                frame = crop_and_scale(frame, cropping_start, cropping_end, scale_factor)
+                frame = crop_and_scale(frame, **crop_and_scale_parameters)
                 cv2.imwrite(f"{training_data_path}/{video_file_basename}_{frame_number}.png",frame)
                 frame_count += 1
             

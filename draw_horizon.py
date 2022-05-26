@@ -1,8 +1,10 @@
 import cv2
 import numpy as np
-from math import cos, sin
+from math import cos, sin, pi
 
-def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, sky_is_up: bool, good_horizon: bool):
+FULL_ROTATION = 2 * pi
+
+def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, good_horizon: bool) -> np.ndarray:
     # if no horizon data is provided, terminate function early and
     # return provided frame
     if angle is None:
@@ -12,6 +14,9 @@ def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, sky_
         horizon_color = (255,0,0)
     else:
         horizon_color = (0,0,255)
+
+    # determine if the sky is up or down based on the angle
+    sky_is_up = (angle >= FULL_ROTATION * .75  or (angle > 0 and angle <= FULL_ROTATION * .25))
 
     # draw sky and ground lines
     height = frame.shape[0]
@@ -46,6 +51,7 @@ def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, sky_
     p2_y = int(np.round(m * frame.shape[1] + b))
     p2 = (p2_x, p2_y)
     frame = cv2.line(frame, p1, p2, horizon_color, 2)
+    cv2.putText(frame, f"Angle: {angle}",(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,line_1_color,1,cv2.LINE_AA)
     return frame
 
 if __name__ == "__main__":
@@ -53,10 +59,9 @@ if __name__ == "__main__":
     path = 'training_data/sample_images/sample_horizon.png'
     angle = 0.5478363265396572
     offset = 0.279784140969163
-
+    good_horizon = True
     frame = cv2.imread(path)
-    sky_is_up = 1
-    frame = draw_horizon(frame, angle, offset, sky_is_up)
+    frame = draw_horizon(frame, angle, offset, good_horizon)
     cv2.imshow("draw_horizon demo", frame)
     key = cv2.waitKey(0)
     if key == ord('q'):

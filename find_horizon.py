@@ -7,9 +7,31 @@
 import cv2
 import numpy as np
 from numpy.linalg import norm
-from math import atan2, cos, sin
+from math import atan2, cos, sin, pi
 from draw_horizon import draw_horizon
 import global_variables as gv
+
+FULL_ROTATION = 2 * pi
+
+def adjust_angle(angle: float, sky_is_up: bool) -> float:
+    """
+    Adjusts the angle within the range of 0-2*pi
+    """
+    angle = abs(angle % FULL_ROTATION)
+    print(f'angle adjust to be within 0 and 2 pi: {angle}')
+    in_sky_is_up_sector = (angle >= FULL_ROTATION * .75  or (angle > 0 and angle <= FULL_ROTATION * .25))
+    
+    if sky_is_up == in_sky_is_up_sector:
+        print(f'returning angle as is: {angle}')
+        return angle
+    if angle < pi:
+        print(f'{angle} is less than pi')
+        angle += pi
+    else:
+        print(f'{angle} is greater than pi')
+        angle -= pi
+        print(f'angle that is returned: {angle}')
+    return angle
 
 def find_horizon(frame:np.ndarray, 
                 predicted_angle:float=None, predicted_offset:float=None, exclusion_thresh:float=None, 
@@ -63,7 +85,6 @@ def find_horizon(frame:np.ndarray,
             cv2.circle(mask, (circle_x, circle_y), 10, (0,0,255), 2)
         cv2.imshow("mask", mask)
         
-
     # if a previous horizon was provided, exclude any points from this
     # horizon that are too far away from the previous horizon
     if predicted_angle is not None:
@@ -104,7 +125,7 @@ def find_horizon(frame:np.ndarray,
                 circle_x = int(np.round(i))
                 circle_y = int(np.round(y[n]))
                 cv2.circle(mask, (circle_x, circle_y), 10, (0,255,0), 2)
-            mask = draw_horizon(mask, predicted_angle, predicted_offset, True, True)
+            mask = draw_horizon(mask, predicted_angle, predicted_offset, True)
             # draw the diagnostic mask
             cv2.imshow("mask", mask)
     
@@ -114,7 +135,7 @@ def find_horizon(frame:np.ndarray,
 
     # polyfit
     m, b = np.polyfit(x, y, 1)
-    angle = atan2(m,1)
+    angle = atan2(m,1) 
     offset = (m * frame.shape[1]/2 + b) / frame.shape[1]
 
     # find the variance (this will be treated as a confidence score)
@@ -127,13 +148,16 @@ def find_horizon(frame:np.ndarray,
     else:
         sky_is_up = 0
 
+    # adjust the angle within the range of 0-2*pi
+    angle = adjust_angle(angle, sky_is_up)
+
     # print(f'angle: {angle} | offset: {offset} | sky_is_up: {sky_is_up}')
 
     # put horizon values into a dictionary
     horizon = {}
     horizon['angle'] = angle
     horizon['offset'] = offset
-    horizon['sky_is_up'] = sky_is_up
+    # horizon['sky_is_up'] = sky_is_up
     horizon['variance'] = variance
     horizon['m'] = m
     horizon['b'] = b
@@ -159,13 +183,12 @@ if __name__ == "__main__":
     horizon = find_horizon(frame_small, diagnostic_mode=True)
     angle = horizon['angle'] 
     offset = horizon['offset'] 
-    sky_is_up = horizon['sky_is_up'] 
     variance = horizon['variance'] 
     m = horizon['m'] 
     b = horizon['b'] 
 
     # draw the horizon
-    frame = draw_horizon(frame, angle, offset, sky_is_up, 1)
+    frame = draw_horizon(frame, angle, offset, True)
 
     # show results
     cv2.imshow("frame", frame)

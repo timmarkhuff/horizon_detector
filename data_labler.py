@@ -1,7 +1,8 @@
 import cv2
 import os
-from math import atan2, cos, sin
+from math import atan2, cos, sin, pi
 from draw_horizon import draw_horizon
+from find_horizon import adjust_angle
 
 # settings
 view_unlabeled = True
@@ -28,7 +29,6 @@ class SampleImage:
         self.pt2 = None
         self.angle = None
         self.offset = None
-        self.sky_is_up = None
         self.labeled = False
         self.deleted = False
     
@@ -39,28 +39,32 @@ class SampleImage:
             self.pt2 = (x, y)
 
         if self.pt1 is not None and self.pt2 is not None:
+            if self.pt1[0] > self.pt2[0]:
+                sky_is_up = False
+            else:
+                sky_is_up = True
+
+            print(f'sky_is_up: {sky_is_up}')
+
             self.angle = atan2((self.pt2[1] - self.pt1[1]), (self.pt2[0] - self.pt1[0]))
-            if self.angle < 0: # prevent any negative values from being saved
-                self.angle += 6.28319
+            print(f'self.angle: {self.angle}')
+            self.angle = adjust_angle(self.angle, sky_is_up)
+            print(f'self.angle: {self.angle}')
+            print('-------------------')
             m = (self.pt2[1] - self.pt1[1]) / (self.pt2[0] - self.pt1[0])
             b = self.pt1[1] - m * self.pt1[0]
             self.offset = (m * self.img.shape[1]//2 + b) / self.img.shape[0]
-            if self.pt1[0] < self.pt2[0]:
-                self.sky_is_up = 1
-            else:
-                self.sky_is_up = 0
             self.labeled = True
 
-    def restore_from_save(self, angle, offset, sky_is_up):
+    def restore_from_save(self, angle, offset):
         # if there is no data to restore, terminate function early
         if angle == "None" or offset == "None":
             self.labeled = False
             return
         
-        # update the angle, offset and sky_is_up flag
+        # update the angle and offset
         self.angle = float(angle)
         self.offset = float(offset)
-        self.sky_is_up = int(sky_is_up)
 
         # reconstruct pt1 and pt2
         self.reconstruct_pt1_and_pt2()
@@ -76,6 +80,7 @@ class SampleImage:
         y = sin(self.angle) 
         m = y / x
         b = self.offset - m * .5
+
         self.pt1 = (0, b)
         self.pt2 = (self.img.shape[1], (m * self.img.shape[1] + b))
 
@@ -84,7 +89,6 @@ class SampleImage:
         self.pt2 = None
         self.angle = None
         self.offset = None
-        self.sky_is_up = None
         self.labeled = False
 
     @staticmethod
@@ -150,7 +154,7 @@ def save_changes(sample_image_list):
             if img.deleted:
                 pass
             else:
-                f.write(f"{img.file_name},{img.angle},{img.offset},{img.sky_is_up}\n")
+                f.write(f"{img.file_name},{img.angle},{img.offset}\n")
 
 # define list of SampleImage objects
 training_data_dir = "training_data/" + input("Enter name of folder containing training data: ")
@@ -180,16 +184,14 @@ for line in lines:
   file_name = split[0]
   angle = split[1]
   offset = split[2]
-  sky_is_up = split[3]
-  retrieved_saved_data[file_name] = [angle, offset, sky_is_up]
+  retrieved_saved_data[file_name] = [angle, offset]
 
 # check if there is saved data for each image. If so, update the object. 
 for img in sample_image_list:
     if img.file_name in retrieved_saved_data:
         angle = retrieved_saved_data[img.file_name][0]
         offset = retrieved_saved_data[img.file_name][1]
-        sky_is_up = retrieved_saved_data[img.file_name][2]
-        img.restore_from_save(angle, offset, sky_is_up)
+        img.restore_from_save(angle, offset)
 
 # main loop
 curr_img_idx = 0
@@ -202,8 +204,7 @@ while True:
         # draw horizon
         angle = curr_img_object.angle
         offset = curr_img_object.offset
-        sky_is_up = curr_img_object.sky_is_up
-        img_to_display = draw_horizon(img_to_display, angle, offset, sky_is_up)
+        img_to_display = draw_horizon(img_to_display, angle, offset, True)
 
     # draw "Marked for deletion" text
     if curr_img_object.deleted:

@@ -24,14 +24,14 @@ def main():
                     'Cannot be wider than resolution of input image.'
     parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
     help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
-    parser.add_argument('--inf_fps', help=help_text, default='20', type=int)        
+    parser.add_argument('--fps', help=help_text, default='20', type=int)        
     args = parser.parse_args()
 
     # globals
     SOURCE = args.source
     RESOLUTION = (int(args.res.split('x')[0]), int(args.res.split('x')[1]))
     INFERENCE_RESOLUTION = (int(args.inf_res.split('x')[0]), int(args.inf_res.split('x')[1]))
-    INFERENCE_FPS = args.inf_fps
+    INFERENCE_FPS = args.fps 
 
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
@@ -54,9 +54,9 @@ def main():
     sleep(1)
 
     # initialize variables for main loop
-    fps_list = []
-    n=0
-    t1 = timer()
+    fps_list = []# for measuring frame rate
+    t1 = timer() # for measuring frame rate
+    n = 0 # frame number
     while video_capture.run:
         # get a frame
         frame = video_capture.read_frame()
@@ -69,7 +69,7 @@ def main():
         if horizon is not None:
             angle = horizon['angle'] 
             offset = horizon['offset'] 
-            sky_is_up = horizon['sky_is_up'] 
+            # sky_is_up = horizon['sky_is_up'] 
             variance = horizon['variance'] 
 
         # check the variance to determine if this is a good horizon 
@@ -91,7 +91,7 @@ def main():
         # draw horizon
         if gv.render_image and horizon is not None:
             frame_copy = frame.copy()
-            frame_copy = draw_horizon(frame_copy, angle, offset, sky_is_up, good_horizon)
+            frame_copy = draw_horizon(frame_copy, angle, offset, good_horizon)
             cv2.imshow("frame", frame_copy)
             # cv2.imwrite(f'images/{n}.png', frame)
 
@@ -118,7 +118,7 @@ def main():
 
         # dynamic wait
         # figure out how much longer we need to wait in order 
-        # for the frame rate to be equal to 1/INFERENCE_FPS
+        # for the actual frame rate to be equal to the target frame rate
         t2 = timer()
         waited_so_far = t2 - t1
         extra = .0005 # compensates for some time that is lost each iteration of loop, not sure why, but this improves accuracy
@@ -128,9 +128,9 @@ def main():
 
         # record the fps
         t_final = timer()
-        fps = 1/(t_final - t1)
+        actual_fps = 1/(t_final - t1)
         t1 = timer()
-        fps_list.append(fps)
+        fps_list.append(actual_fps)
         n+=1
     
     average_fps = np.mean(fps_list)
