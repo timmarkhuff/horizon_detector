@@ -44,13 +44,8 @@ class SampleImage:
             else:
                 sky_is_up = True
 
-            print(f'sky_is_up: {sky_is_up}')
-
             self.angle = atan2((self.pt2[1] - self.pt1[1]), (self.pt2[0] - self.pt1[0]))
-            print(f'self.angle: {self.angle}')
             self.angle = adjust_angle(self.angle, sky_is_up)
-            print(f'self.angle: {self.angle}')
-            print('-------------------')
             m = (self.pt2[1] - self.pt1[1]) / (self.pt2[0] - self.pt1[0])
             b = self.pt1[1] - m * self.pt1[0]
             self.offset = (m * self.img.shape[1]//2 + b) / self.img.shape[0]

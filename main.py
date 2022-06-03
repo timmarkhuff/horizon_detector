@@ -1,9 +1,11 @@
 print('----------STARTING HORIZON DETECTOR----------')
 import cv2
 import numpy as np
+import os
 from argparse import ArgumentParser
 from time import sleep
 from timeit import default_timer as timer
+from datetime import datetime
 
 # my libraries
 from video_classes import CustomVideoCapture, CustomVideoWriter
@@ -32,6 +34,14 @@ def main():
     RESOLUTION = (int(args.res.split('x')[0]), int(args.res.split('x')[1]))
     INFERENCE_RESOLUTION = (int(args.inf_res.split('x')[0]), int(args.inf_res.split('x')[1]))
     INFERENCE_FPS = args.fps 
+
+    # make a folder for the output data
+    now = datetime.now()
+    dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
+    output_data_path = f'training_data/{dt_string}'
+    os.mkdir(output_data_path)
+    os.mkdir(output_data_path + '/good')
+    os.mkdir(output_data_path + '/bad')
 
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
@@ -80,6 +90,22 @@ def main():
             good_horizon = False
             recent_horizons = [None, recent_horizons[0]]
 
+        # write to output file
+        if good_horizon:
+            angle_to_write = angle
+            offset_to_write = offset
+            img_path = f'{output_data_path}/good/{n}.png'
+        else:
+            angle_to_write = None
+            offset_to_write = None
+            img_path = f'{output_data_path}/bad/{n}.png'
+
+        img_name = f'{n}.png'
+
+        cv2.imwrite(img_path, scaled_and_cropped_frame)
+        with open(f'{output_data_path}/output.txt', 'a') as f:
+            f.write(f'{img_name},{angle_to_write},{offset_to_write}\n')
+
         # predict the next horizon
         if None in recent_horizons:
             predicted_angle = None
@@ -93,7 +119,7 @@ def main():
             frame_copy = frame.copy()
             frame_copy = draw_horizon(frame_copy, angle, offset, good_horizon)
             cv2.imshow("frame", frame_copy)
-            # cv2.imwrite(f'images/{n}.png', frame)
+            # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
 
         # add frame to recording queue
         if gv.recording:

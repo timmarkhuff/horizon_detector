@@ -116,7 +116,7 @@ class CustomVideoWriter:
         fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
         now = datetime.now()
         self.dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
-        self.writer = cv2.VideoWriter(f'recordings/{self.dt_string}.avi', fourcc, fps, resolution)
+        self.writer = cv2.VideoWriter(f'recordings/{self.dt_string}.avi', fourcc, fps, self.resolution)
         self.queue = Queue()
 
     def start_writing(self):

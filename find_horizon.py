@@ -18,19 +18,14 @@ def adjust_angle(angle: float, sky_is_up: bool) -> float:
     Adjusts the angle within the range of 0-2*pi
     """
     angle = abs(angle % FULL_ROTATION)
-    print(f'angle adjust to be within 0 and 2 pi: {angle}')
     in_sky_is_up_sector = (angle >= FULL_ROTATION * .75  or (angle > 0 and angle <= FULL_ROTATION * .25))
     
     if sky_is_up == in_sky_is_up_sector:
-        print(f'returning angle as is: {angle}')
         return angle
     if angle < pi:
-        print(f'{angle} is less than pi')
         angle += pi
     else:
-        print(f'{angle} is greater than pi')
         angle -= pi
-        print(f'angle that is returned: {angle}')
     return angle
 
 def find_horizon(frame:np.ndarray, 
