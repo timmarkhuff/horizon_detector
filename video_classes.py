@@ -6,6 +6,7 @@ from time import sleep
 from timeit import default_timer as timer
 import global_variables as gv
 from datetime import datetime
+import platform
 
 class CustomVideoCapture:
     def __init__(self, resolution=None, source=0):
@@ -22,7 +23,8 @@ class CustomVideoCapture:
             self.queue = Queue(maxsize=1000)
 
         # define the VideoCapture object
-        if gv.os == "Linux" or self.using_camera == False:
+        os = platform.system()
+        if os == "Linux" or self.using_camera == False:
             self.cap = cv2.VideoCapture(self.source)
         elif self.using_camera == True:
             self.cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)

@@ -13,6 +13,7 @@ import global_variables as gv
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import find_horizon
 from draw_horizon import draw_horizon
+from text_to_speech import CustomSpeaker
 
 def main():
     # parse arguments
@@ -21,12 +22,13 @@ def main():
     parser.add_argument('--source', help=help_text, default='0', type=str)     
     help_text = 'Default resolution used when streaming from camera. Not used when streaming from video file. '\
                    'Options include: 640x480, 1280x720 and 1920x1080.'
-    parser.add_argument('--res', help=help_text, default='640x480', type=str)
+    parser.add_argument('--res', help=help_text, default='1280x720', type=str)
     help_text = 'Resolution of image upon which inferences will be peformed. Smaller size means faster inferences. '\
                     'Cannot be wider than resolution of input image.'
     parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
     help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
-    parser.add_argument('--fps', help=help_text, default='20', type=int)        
+    parser.add_argument('--fps', help=help_text, default='20', type=int)       
+
     args = parser.parse_args()
 
     # globals
@@ -34,17 +36,13 @@ def main():
     RESOLUTION = (int(args.res.split('x')[0]), int(args.res.split('x')[1]))
     INFERENCE_RESOLUTION = (int(args.inf_res.split('x')[0]), int(args.inf_res.split('x')[1]))
     INFERENCE_FPS = args.fps 
-
-    # make a folder for the output data
-    now = datetime.now()
-    dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
-    output_data_path = f'training_data/{dt_string}'
-    os.mkdir(output_data_path)
-    os.mkdir(output_data_path + '/good')
-    os.mkdir(output_data_path + '/bad')
+    horizon_detection_on = False
 
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
+
+    # define CustomSpeak object
+    speaker = CustomSpeaker()
 
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
@@ -70,54 +68,43 @@ def main():
     while video_capture.run:
         # get a frame
         frame = video_capture.read_frame()
+        frame_copy = frame.copy()
 
-        # crop and scale the image
-        scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
+        horizon = None # initialize the value
+        if horizon_detection_on:
+            # crop and scale the image
+            scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
 
-        # find the horizon
-        horizon = find_horizon(scaled_and_cropped_frame, predicted_angle, predicted_offset, EXCLUSION_THRESH, diagnostic_mode=True)
-        if horizon is not None:
-            angle = horizon['angle'] 
-            offset = horizon['offset'] 
-            # sky_is_up = horizon['sky_is_up'] 
-            variance = horizon['variance'] 
+            # find the horizon
+            horizon = find_horizon(scaled_and_cropped_frame, predicted_angle, predicted_offset, EXCLUSION_THRESH, diagnostic_mode=True)
+            if horizon is not None:
+                angle = horizon['angle'] 
+                offset = horizon['offset'] 
+                variance = horizon['variance'] 
 
-        # check the variance to determine if this is a good horizon 
-        if variance < 1.3: # percentage of the image height that is considered an acceptable variance
-            good_horizon = True
-            recent_horizons = [horizon, recent_horizons[0]]
-        else:
-            good_horizon = False
-            recent_horizons = [None, recent_horizons[0]]
+            # check the variance to determine if this is a good horizon 
+            if variance < 1.3: # percentage of the image height that is considered an acceptable variance
+                good_horizon = True
+                recent_horizons = [horizon, recent_horizons[0]]
+            else:
+                good_horizon = False
+                recent_horizons = [None, recent_horizons[0]]
 
-        # write to output file
-        if good_horizon:
-            angle_to_write = angle
-            offset_to_write = offset
-            img_path = f'{output_data_path}/good/{n}.png'
-        else:
-            angle_to_write = None
-            offset_to_write = None
-            img_path = f'{output_data_path}/bad/{n}.png'
-
-        img_name = f'{n}.png'
-
-        cv2.imwrite(img_path, scaled_and_cropped_frame)
-        with open(f'{output_data_path}/output.txt', 'a') as f:
-            f.write(f'{img_name},{angle_to_write},{offset_to_write}\n')
-
-        # predict the next horizon
-        if None in recent_horizons:
-            predicted_angle = None
-            predicted_offset = None
-        else: 
-            predicted_angle = recent_horizons[0]['angle'] + recent_horizons[0]['angle'] - recent_horizons[1]['angle'] 
-            predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset'] 
-        
+            # predict the next horizon
+            if None in recent_horizons:
+                predicted_angle = None
+                predicted_offset = None
+            else: 
+                predicted_angle = recent_horizons[0]['angle'] + recent_horizons[0]['angle'] - recent_horizons[1]['angle'] 
+                predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset'] 
+            
         # draw horizon
-        if gv.render_image and horizon is not None:
-            frame_copy = frame.copy()
+        if horizon is not None:
             frame_copy = draw_horizon(frame_copy, angle, offset, good_horizon)
+            # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
+
+        # show image
+        if gv.render_image:
             cv2.imshow("frame", frame_copy)
             # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
 
@@ -130,16 +117,18 @@ def main():
             break
         elif key == ord('d'):
             gv.render_image = not gv.render_image
+        elif key == ord('h'):
+            horizon_detection_on = not horizon_detection_on
         elif key == ord('r'):
             if gv.recording == False:
                 print('---------------------------------------------')
-                print('Recording started.')
+                speaker.queue.put('Recording started.')
                 video_writer = CustomVideoWriter(video_capture.resolution, INFERENCE_FPS)
                 video_writer.start_writing()
                 gv.recording = True
             else:
                 gv.recording = False
-                print('Recording stopped.')
+                speaker.queue.put('Recording stopped.')
                 print('---------------------------------------------')
 
         # dynamic wait
@@ -162,12 +151,12 @@ def main():
     average_fps = np.mean(fps_list)
     print(f'main loop average fps: {average_fps}')
     video_capture.release()
+    speaker.release()
     cv2.destroyAllWindows()
     gv.recording = False
     gv.run = False
-    sleep(2)
+    sleep(1)
     print('---------------------END---------------------')
 
 if __name__ == '__main__':
     main()
-
