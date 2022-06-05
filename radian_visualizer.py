@@ -16,7 +16,7 @@ while True:
     else:
         sky_is_up = False
     frame_drawn = frame.copy()
-    frame_drawn = draw_horizon(frame_drawn, angle, offset, sky_is_up, True)
+    frame_drawn = draw_horizon(frame_drawn, angle, offset, True)
     cv2.imshow("frame", frame_drawn)
     key = cv2.waitKey(100)
     if key == ord('q'):
