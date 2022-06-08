@@ -1,12 +1,16 @@
+# standard libraries
 import cv2
 import numpy as np
+import os
 from queue import Queue
 from threading import Thread
 from time import sleep
 from timeit import default_timer as timer
 import global_variables as gv
-from datetime import datetime
 import platform
+
+# my libraries
+from text_to_speech import speaker
 
 class CustomVideoCapture:
     def __init__(self, resolution=None, source=0):
@@ -41,7 +45,7 @@ class CustomVideoCapture:
         self.cap.set(3,self.resolution[0])
         self.cap.set(4,self.resolution[1])
 
-        print(f'resolution: {self.resolution}')
+        speaker.add_to_queue(f'resolution: {self.resolution}')
 
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
@@ -64,7 +68,6 @@ class CustomVideoCapture:
             if self.queue.full():
                 sleep(1) # wait a bit for the main loop to catch up
                 continue # terminate the current iteration of the loop early
-                
             else:
                 ret, frame = self.cap.read()
             
@@ -86,9 +89,9 @@ class CustomVideoCapture:
 
         # if streaming from a video file
         if self.queue.empty():
-            self.run = False
-            print('No more frames left in the queue.')
-            self.release()
+            print('No more frames left in the CustomVideoCapture queue.')
+            # self.release()
+            return None
         else:
             frame = self.queue.get()
             return frame         
@@ -112,18 +115,25 @@ class CustomVideoCapture:
         self.cap.release()
 
 class CustomVideoWriter:
-    def __init__(self, resolution=(1280, 720), fps=30):
+    def __init__(self, filename, resolution=(1280, 720), fps=30):
+        self.filename = filename
         self.resolution = resolution
         self.fps = fps
+
+        # check if the folder exists, if not, create it
+        recordings_path = "recordings"
+        if not os.path.exists(recordings_path):
+            os.makedirs(recordings_path)
+
         fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
-        now = datetime.now()
-        self.dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
-        self.writer = cv2.VideoWriter(f'recordings/{self.dt_string}.avi', fourcc, fps, self.resolution)
+        self.writer = cv2.VideoWriter(f'recordings/{self.filename}', fourcc, fps, self.resolution)
         self.queue = Queue()
+        self.recording = False
 
     def start_writing(self):
         def thread():
-            print(f'Recording in {self.resolution} at {self.fps} FPS.')
+            self.run = True
+            speaker.add_to_queue(f'Recording in {self.resolution} at {self.fps} FPS.')
             while gv.recording or not self.queue.empty():
                 if self.queue.empty():
                     sleep(1)
@@ -132,11 +142,13 @@ class CustomVideoWriter:
                     frame = self.queue.get()
                     self.writer.write(frame)
             self.stop()
-            print(f"Finished writing video {self.dt_string}.avi.")
+            speaker.add_to_queue(f"Recording stopped.")
         Thread(target=thread).start()
 
     def stop(self):
         self.writer.release()
+        self.run = False
+
 
 
     

@@ -124,7 +124,7 @@ def find_horizon(frame:np.ndarray,
             # draw the diagnostic mask
             cv2.imshow("mask", mask)
     
-    if x.shape[0] < 5:
+    if x.shape[0] < 3:
         # return None values for horizon, since too few points were found
         return horizon 
 
@@ -134,9 +134,17 @@ def find_horizon(frame:np.ndarray,
     offset = (m * frame.shape[1]/2 + b) / frame.shape[1]
 
     # find the variance (this will be treated as a confidence score)
-    yfit = np.polyval((m, b), x)
-    variance = np.average(np.absolute(yfit - y)) / frame.shape[0] * 100
-
+    p1 = np.array([0, b])
+    p2 = np.array([frame.shape[1], m * frame.shape[1] + b])
+    p2_minus_p1 = p2 - p1
+    distance_list = []
+    for n, x_point in enumerate(x):
+        y_point = y[n]
+        p3 = np.array([x_point, y_point])
+        distance = norm(np.cross(p2_minus_p1, p1-p3))/norm(p2_minus_p1)
+        distance_list.append(distance)
+    variance = np.average(distance_list) / frame.shape[0] * 100
+    
     # determine the direction of the sky (above or below)
     if m * avg_x + b > avg_y:
         sky_is_up = 1
@@ -145,8 +153,6 @@ def find_horizon(frame:np.ndarray,
 
     # adjust the angle within the range of 0-2*pi
     angle = adjust_angle(angle, sky_is_up)
-
-    # print(f'angle: {angle} | offset: {offset} | sky_is_up: {sky_is_up}')
 
     # put horizon values into a dictionary
     horizon = {}
