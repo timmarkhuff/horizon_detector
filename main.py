@@ -34,18 +34,28 @@ def main():
 
     # globals
     SOURCE = args.source
-    RESOLUTION = (int(args.res.split('x')[0]), int(args.res.split('x')[1]))
+    RESOLUTION_STR = args.res
+    RESOLUTION = tuple(map(int, RESOLUTION_STR.split('x')))
+    # RESOLUTION = (int(args.res.split('x')[0]), int(args.res.split('x')[1]))
+    
     INFERENCE_RESOLUTION = (int(args.inf_res.split('x')[0]), int(args.inf_res.split('x')[1]))
     FPS = args.fps 
-    horizon_detection_on = False
+    horizon_detection = False
 
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
 
+    # paused frame
+    paused_frame = np.zeros((500, 500, 1), dtype = "uint8")
+    cv2.putText(paused_frame, 'Real-time display is paused.',(20,30),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
+    cv2.putText(paused_frame, "Press 'd' to enable real-time display.",(20,60),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
+    cv2.putText(paused_frame, "Press 'q' to quit.",(20,90),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
+    cv2.imshow("Real-time Display", paused_frame)
+
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
     EXCLUSION_THRESH = video_capture.resolution[1] * .04
-    if crop_and_scale_parameters is None:
+    if not crop_and_scale_parameters:
         print('Could not get cropping and scaling parameters.')
         return
 
@@ -55,12 +65,17 @@ def main():
     predicted_angle = None
     predicted_offset = None
 
+    # initialize some dictionaries to save the diagnostic data
+    datadict = {}
+    metadata = {}
+    frame_data = {}
+
     # start VideoStreamer
     video_capture.start_stream()
     sleep(1)
 
     # initialize variables for main loop
-    fps_list = []# for measuring frame rate
+    fps_list = [] # for measuring frame rate
     t1 = timer() # for measuring frame rate
     n = 0 # frame number
     while video_capture.run:
@@ -69,7 +84,7 @@ def main():
         frame_copy = frame.copy()
 
         horizon = None # initialize the value
-        if horizon_detection_on:
+        if horizon_detection:
             # crop and scale the image
             scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
 
@@ -96,7 +111,7 @@ def main():
                 predicted_angle = recent_horizons[0]['angle'] + recent_horizons[0]['angle'] - recent_horizons[1]['angle'] 
                 predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset'] 
             
-        if horizon_detection_on and gv.recording:
+        if horizon_detection and gv.recording:
             # determine the number of the frame within the current recording
             recording_frame_num = next(recording_frame_iter)
 
@@ -120,7 +135,7 @@ def main():
 
         # show image
         if gv.render_image:
-            cv2.imshow("frame", frame_copy)
+            cv2.imshow("Real-time Display", frame_copy)
             # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
 
         # add frame to recording queue
@@ -131,9 +146,15 @@ def main():
         if key == ord('q'):
             break
         elif key == ord('d'):
+            cv2.imshow("Real-time Display", paused_frame)
             gv.render_image = not gv.render_image
+            speaker.add_to_queue(f'Real-time display: {gv.render_image}')
         elif key == ord('h'):
-            horizon_detection_on = not horizon_detection_on
+            if gv.recording:
+                speaker.add_to_queue('Cannot toggle horizon detection while recording.')
+            else:
+                horizon_detection = not horizon_detection
+                speaker.add_to_queue(f'Horizon detection: {horizon_detection}')
         elif key == ord('r'):
             gv.recording = not gv.recording
             if gv.recording:
@@ -152,14 +173,15 @@ def main():
                 # create some dictionaries to save the diagnostic data
                 datadict = {}
                 metadata = {}
+                frame_data = {}
             else:
                 # save diagnostic about recording
-                if horizon_detection_on:
+                if horizon_detection:
                     # save metadata about recording
                     metadata['fps'] = FPS
                     metadata['datetime'] = dt_string
                     metadata['total_frames'] = next(recording_frame_iter)
-                    metadata['resolution'] = RESOLUTION
+                    metadata['resolution'] = RESOLUTION_STR
                     datadict['metadata'] = metadata
 
                     # wait for video_writer to finish recording      
@@ -169,6 +191,11 @@ def main():
                     # save the json file
                     with open(f'recordings/{dt_string}.txt', 'w') as convert_file: 
                         convert_file.write(json.dumps(datadict))
+
+                    # clear out the diagnostic data dictionaries, we are done with them for now
+                    datadict = {}
+                    metadata = {}
+                    frame_data = {}
 
         # DYNAMIC WAIT
         # Figure out how much longer we need to wait in order 
@@ -185,8 +212,15 @@ def main():
         actual_fps = 1/(t_final - t1)
         t1 = timer()
         fps_list.append(actual_fps) # for measuring the fps of the entire runtime
+        
+        # save the fps for the current frame within the recording
+        if gv.recording:
+            frame_data['fps'] = actual_fps
+
+        # increment the frame count for the whole runtime           
         n += 1
     
+    # clean up and finish program
     average_fps = np.mean(fps_list)
     print(f'main loop average fps: {average_fps}')
     video_capture.release()

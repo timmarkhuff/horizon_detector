@@ -61,7 +61,8 @@ def main():
 
         # extract some values from the metadata
         fps = datadict['metadata']['fps']
-        resolution = datadict['metadata']['resolution']
+        resolution_str = datadict['metadata']['resolution']
+        resolution = tuple(map(int, resolution_str.split('x')))
 
         # define video_capture
         source = f'{recordings_path}/{video_name}.{video_extension}'
