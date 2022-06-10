@@ -1,14 +1,11 @@
 ######## Horizon Detection Using Basic Image Processing #########
 # Author: Tim Huff
-# Date: 5/24/2022
-# Description: 
-# ...
 
 import cv2
 import numpy as np
 from numpy.linalg import norm
 from math import atan2, cos, sin, pi
-from draw_horizon import draw_horizon
+from draw_display import draw_horizon
 import global_variables as gv
 
 FULL_ROTATION = 2 * pi
@@ -38,9 +35,7 @@ def find_horizon(frame:np.ndarray,
     exclusion_thresh: parameter that controls how close horizon points have to be
     to predicted horizon in order to be considered valid
     """
-    # initialize the horizon as None
-    # if no horizon can be found, return this
-    horizon = None
+
     # generate mask
     bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(bgr2gray,250,255,cv2.THRESH_OTSU)
@@ -51,8 +46,19 @@ def find_horizon(frame:np.ndarray,
     else: # for windows
         contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
+    # Initialize the horizon as a dictionary of None values.
+    # If no horizon can be found, this will be returned.
+    horizon = {}
+    horizon['angle'] = None
+    horizon['offset'] = None
+    horizon['variance'] = None
+    horizon['m'] = None
+    horizon['b'] = None
+
     if len(contours) == 0:
-        return horizon # return None values for horizon
+        # If there are too few contours to find a horizon,
+        # return a dictionary of None values
+        return horizon 
 
     # find the contour with the largest area
     largest_contour = sorted(contours, key=cv2.contourArea, reverse=True)[0] 
@@ -83,6 +89,9 @@ def find_horizon(frame:np.ndarray,
     # if a previous horizon was provided, exclude any points from this
     # horizon that are too far away from the previous horizon
     if predicted_angle is not None:
+        # convert predicted angle to radians
+        predicted_angle = predicted_angle * 2 * pi
+
         # convert from angle and offset of predicted horizon to m and b
         # convert from normalized offset to absolute offset
         predicted_offset_absolute = int(np.round(predicted_offset * frame.shape[0]))
@@ -115,6 +124,8 @@ def find_horizon(frame:np.ndarray,
         y = np.array(y_filtered)
 
         if diagnostic_mode and gv.render_image:
+            # normalize the angle
+            predicted_angle = predicted_angle / (2 * pi)
             # draw the filtered points
             for n, i in enumerate(x):
                 circle_x = int(np.round(i))
@@ -130,7 +141,7 @@ def find_horizon(frame:np.ndarray,
 
     # polyfit
     m, b = np.polyfit(x, y, 1)
-    angle = atan2(m,1) 
+    angle = atan2(m,1)
     offset = (m * frame.shape[1]/2 + b) / frame.shape[1]
 
     # find the variance (this will be treated as a confidence score)
@@ -152,13 +163,15 @@ def find_horizon(frame:np.ndarray,
         sky_is_up = 0
 
     # adjust the angle within the range of 0-2*pi
-    angle = adjust_angle(angle, sky_is_up)
+    angle = adjust_angle(angle, sky_is_up) 
+
+    # normalize the angle
+    angle = angle / (2 * pi)
 
     # put horizon values into a dictionary
     horizon = {}
     horizon['angle'] = angle
     horizon['offset'] = offset
-    # horizon['sky_is_up'] = sky_is_up
     horizon['variance'] = variance
     horizon['m'] = m
     horizon['b'] = b

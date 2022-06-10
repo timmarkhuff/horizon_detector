@@ -13,8 +13,9 @@ from video_classes import CustomVideoCapture, CustomVideoWriter
 import global_variables as gv
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import find_horizon
-from draw_horizon import draw_horizon
+from draw_display import draw_horizon, draw_servos
 from text_to_speech import speaker
+from servos import get_aileron_duty
 
 def main():
     # parse arguments
@@ -36,11 +37,11 @@ def main():
     SOURCE = args.source
     RESOLUTION_STR = args.res
     RESOLUTION = tuple(map(int, RESOLUTION_STR.split('x')))
-    # RESOLUTION = (int(args.res.split('x')[0]), int(args.res.split('x')[1]))
-    
     INFERENCE_RESOLUTION = (int(args.inf_res.split('x')[0]), int(args.inf_res.split('x')[1]))
     FPS = args.fps 
-    horizon_detection = False
+    actual_fps = 0
+    horizon_detection = True
+    auto_pilot = False
 
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
@@ -79,24 +80,29 @@ def main():
     t1 = timer() # for measuring frame rate
     n = 0 # frame number
     while video_capture.run:
-        # get a frame
+        # get a frame from the webcam or video
         frame = video_capture.read_frame()
         frame_copy = frame.copy()
 
-        horizon = None # initialize the value
+        # initialize a dictionary to contain data about the current frame
+        frame_data = {}
+
+        # Initialize the horizon as a dictionary of None values.
+        horizon = {}
+        horizon['angle'] = None
+        horizon['offset'] = None
+        horizon['variance'] = None
+        horizon['m'] = None
+        horizon['b'] = None
         if horizon_detection:
             # crop and scale the image
             scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
 
             # find the horizon
             horizon = find_horizon(scaled_and_cropped_frame, predicted_angle, predicted_offset, EXCLUSION_THRESH, diagnostic_mode=True)
-            if horizon is not None:
-                angle = horizon['angle'] 
-                offset = horizon['offset'] 
-                variance = horizon['variance'] 
 
             # check the variance to determine if this is a good horizon 
-            if variance < 1.3: # percentage of the image height that is considered an acceptable variance
+            if horizon['variance'] and horizon['variance'] < 1.3: # percentage of the image height that is considered an acceptable variance
                 is_good_horizon = 1
                 recent_horizons = [horizon, recent_horizons[0]]
             else:
@@ -109,32 +115,35 @@ def main():
                 predicted_offset = None
             else: 
                 predicted_angle = recent_horizons[0]['angle'] + recent_horizons[0]['angle'] - recent_horizons[1]['angle'] 
-                predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset'] 
-            
+                predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset']
+
+        # determine servo duties
+        if auto_pilot and is_good_horizon:
+            aileron_duty = get_aileron_duty(horizon['angle'])
+        else: 
+            aileron_duty = 7
+
+        # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
             # determine the number of the frame within the current recording
             recording_frame_num = next(recording_frame_iter)
 
             # save horizon data to dictionary
             frame_data = {}
-            if horizon is not None:
-                frame_data['angle'] = horizon['angle']
-                frame_data['offset'] = horizon['offset']
-                frame_data['is_good_horizon'] = is_good_horizon
-            else:
-                frame_data['angle'] = None
-                frame_data['offset'] = None
-                frame_data['is_good_horizon'] = None
-
-            datadict[recording_frame_num] = frame_data
-            
+            frame_data['angle'] = horizon['offset']
+            frame_data['offset'] = horizon['offset']
+            frame_data['is_good_horizon'] = is_good_horizon
+            frame_data['fps'] = actual_fps
+            frames[recording_frame_num] = frame_data
+         
         # draw horizon
-        if horizon is not None and gv.render_image:
-            frame_copy = draw_horizon(frame_copy, angle, offset, is_good_horizon)
+        if horizon['angle'] and gv.render_image:
+            frame_copy = draw_horizon(frame_copy, horizon['angle'], horizon['offset'], is_good_horizon)
             # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
 
         # show image
         if gv.render_image:
+            frame_copy = draw_servos(frame_copy, aileron_duty)
             cv2.imshow("Real-time Display", frame_copy)
             # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
 
@@ -142,6 +151,7 @@ def main():
         if gv.recording:
             video_writer.queue.put(frame)
 
+        # wait and check for pressed keys
         key = cv2.waitKey(1)
         if key == ord('q'):
             break
@@ -155,6 +165,12 @@ def main():
             else:
                 horizon_detection = not horizon_detection
                 speaker.add_to_queue(f'Horizon detection: {horizon_detection}')
+        elif key == ord('a'):
+            if horizon_detection:
+                auto_pilot = not auto_pilot
+                speaker.add_to_queue(f'Auto-pilot: {auto_pilot}')
+            else:
+                speaker.add_to_queue('Cannot enable autopilot without horizon detection.')
         elif key == ord('r'):
             gv.recording = not gv.recording
             if gv.recording:
@@ -173,6 +189,7 @@ def main():
                 # create some dictionaries to save the diagnostic data
                 datadict = {}
                 metadata = {}
+                frames = {}
                 frame_data = {}
             else:
                 # save diagnostic about recording
@@ -183,6 +200,7 @@ def main():
                     metadata['total_frames'] = next(recording_frame_iter)
                     metadata['resolution'] = RESOLUTION_STR
                     datadict['metadata'] = metadata
+                    datadict['frames'] = frames
 
                     # wait for video_writer to finish recording      
                     while video_writer.run:
@@ -213,10 +231,6 @@ def main():
         t1 = timer()
         fps_list.append(actual_fps) # for measuring the fps of the entire runtime
         
-        # save the fps for the current frame within the recording
-        if gv.recording:
-            frame_data['fps'] = actual_fps
-
         # increment the frame count for the whole runtime           
         n += 1
     
