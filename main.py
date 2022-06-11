@@ -74,6 +74,16 @@ def main():
     # start VideoStreamer
     video_capture.start_stream()
     sleep(1)
+    
+    # define servos
+    aileron_duty = 0
+    if gv.os == "Linux":
+        from gpiozero import Servo
+        from gpiozero.pins.pigpio import PiGPIOFactory
+        factory = PiGPIOFactory()
+        servo = Servo(17, pin_factory=factory)
+        servo.value = 0
+        sleep(2)
 
     # initialize variables for main loop
     fps_list = [] # for measuring frame rate
@@ -120,8 +130,10 @@ def main():
         # determine servo duties
         if auto_pilot and is_good_horizon:
             aileron_duty = get_aileron_duty(horizon['angle'])
-        else: 
-            aileron_duty = 7
+        
+        # actuate the servos
+        if auto_pilot and gv.os == "Linux" and aileron_duty: 
+            servo.value = aileron_duty          
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -242,7 +254,13 @@ def main():
     cv2.destroyAllWindows()
     gv.recording = False
     gv.run = False
+    
+    # clean up servos
+    if gv.os == "Linux":
+        servo.value = 0
+        
     sleep(1)
+    
     print('---------------------END---------------------')
 
 if __name__ == '__main__':

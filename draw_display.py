@@ -78,8 +78,8 @@ def draw_servos(frame: np.ndarray, aileron_duty) -> np.ndarray:
     full_deflection = int(frame.shape[1] * .02)
 
     # define values related to servos
-    center_duty = 7
-    max_deflection = 3
+    center_duty = 0
+    max_deflection = 1
     duty_diff = aileron_duty - center_duty
     duty_diff_norm = duty_diff / max_deflection
 
