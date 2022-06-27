@@ -6,7 +6,8 @@ import json
 from timeit import default_timer as timer
 
 # my libraries
-from draw_horizon import draw_horizon
+from draw_display import draw_horizon, draw_servos, draw_hud
+# from draw_horizon import draw_horizon
 
 def main():
     # check if the folder exists, if not, create it
@@ -81,13 +82,16 @@ def main():
 
             # extract the values
             dict_key = str(frame_num)
-            angle = datadict[dict_key]['angle']
-            offset = datadict[dict_key]['offset']
-            good_horizon = datadict[dict_key]['is_good_horizon']
+            angle = datadict['frames'][dict_key]['angle']
+            offset = datadict['frames'][dict_key]['offset']
+            is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
 
             # draw the horizon
             if angle != 'null':            
-                frame = draw_horizon(frame, angle, offset, good_horizon)
+                frame = draw_horizon(frame, angle, offset, is_good_horizon)
+
+            # draw HUD
+            frame = draw_hud(frame, angle, offset, is_good_horizon)
 
             # send the frame to the queue to be recorded
             writer.write(frame)
@@ -118,8 +122,8 @@ def main():
         cv2.destroyAllWindows()
 
     # print final message
-    print('----------------------------------------')
     print(f"Finished producing {n + 1} videos.")
+    print('----------------------------------------')
 
 if __name__ == "__main__":
     main()

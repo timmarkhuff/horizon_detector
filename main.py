@@ -1,4 +1,3 @@
-print('----------STARTING HORIZON DETECTOR----------')
 import cv2
 import numpy as np
 from argparse import ArgumentParser
@@ -13,11 +12,12 @@ from video_classes import CustomVideoCapture, CustomVideoWriter
 import global_variables as gv
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import find_horizon
-from draw_display import draw_horizon, draw_servos
+from draw_display import draw_horizon, draw_servos, draw_hud
 from text_to_speech import speaker
-from servos import get_aileron_duty
+from servos import get_aileron_value
 
 def main():
+    print('----------STARTING HORIZON DETECTOR----------')
     # parse arguments
     parser = ArgumentParser()
     help_text = 'The path to the video. For webcam, enter the index of the webcam you want to use, e.g. 0 '
@@ -42,6 +42,41 @@ def main():
     actual_fps = 0
     horizon_detection = True
     auto_pilot = False
+
+    # functions
+    def finish_recording():
+        """
+        Finishes up the recording and saves the diagnostic data file
+        """
+
+        metadata['fps'] = FPS
+        metadata['datetime'] = dt_string
+        metadata['total_frames'] = next(recording_frame_iter)
+        metadata['resolution'] = RESOLUTION_STR
+        datadict['metadata'] = metadata
+        datadict['frames'] = frames
+        # count the number of high confidence horizons
+        high_conf_horizon_ratio = 0
+        for value in datadict['frames'].values():
+            if value['is_good_horizon'] == 1:
+                high_conf_horizon_ratio += 1
+        metadata['high_conf_horizon_ratio'] = high_conf_horizon_ratio / metadata['total_frames']   
+
+        # wait for video_writer to finish recording      
+        while video_writer.run:
+            sleep(.1) 
+
+        # save the json file
+        with open(f'recordings/{dt_string}.txt', 'w') as convert_file: 
+            convert_file.write(json.dumps(datadict))
+
+        # wait for video_writer to finish recording      
+        while video_writer.run:
+            sleep(.1) 
+
+        # save the json file
+        with open(f'recordings/{dt_string}.txt', 'w') as convert_file: 
+            convert_file.write(json.dumps(datadict))
 
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
@@ -76,7 +111,7 @@ def main():
     sleep(1)
     
     # define servos
-    aileron_duty = 0
+    aileron_value = 0
     if gv.os == "Linux":
         from gpiozero import Servo
         from gpiozero.pins.pigpio import PiGPIOFactory
@@ -92,7 +127,6 @@ def main():
     while video_capture.run:
         # get a frame from the webcam or video
         frame = video_capture.read_frame()
-        frame_copy = frame.copy()
 
         # initialize a dictionary to contain data about the current frame
         frame_data = {}
@@ -112,7 +146,8 @@ def main():
             horizon = find_horizon(scaled_and_cropped_frame, predicted_angle, predicted_offset, EXCLUSION_THRESH, diagnostic_mode=True)
 
             # check the variance to determine if this is a good horizon 
-            if horizon['variance'] and horizon['variance'] < 1.3: # percentage of the image height that is considered an acceptable variance
+            accetable_variance = 1.3 # percentage of the image height that is considered an acceptable variance
+            if horizon['variance'] and horizon['variance'] < accetable_variance: 
                 is_good_horizon = 1
                 recent_horizons = [horizon, recent_horizons[0]]
             else:
@@ -129,11 +164,13 @@ def main():
 
         # determine servo duties
         if auto_pilot and is_good_horizon:
-            aileron_duty = get_aileron_duty(horizon['angle'])
+            aileron_value = get_aileron_value(horizon['angle'])
+        else:
+            aileron_value = None
         
         # actuate the servos
-        if auto_pilot and gv.os == "Linux" and aileron_duty: 
-            servo.value = aileron_duty          
+        if auto_pilot and gv.os == "Linux" and aileron_value: 
+            servo.value = aileron_value          
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -142,22 +179,24 @@ def main():
 
             # save horizon data to dictionary
             frame_data = {}
-            frame_data['angle'] = horizon['offset']
+            frame_data['angle'] = horizon['angle']
             frame_data['offset'] = horizon['offset']
             frame_data['is_good_horizon'] = is_good_horizon
             frame_data['fps'] = actual_fps
+            frame_data['aileron_value'] = aileron_value
             frames[recording_frame_num] = frame_data
          
-        # draw horizon
-        if horizon['angle'] and gv.render_image:
-            frame_copy = draw_horizon(frame_copy, horizon['angle'], horizon['offset'], is_good_horizon)
-            # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
-
-        # show image
         if gv.render_image:
-            frame_copy = draw_servos(frame_copy, aileron_duty)
+            frame_copy = frame.copy()
+            # draw horizon
+            if horizon['angle'] and gv.render_image:
+                frame_copy = draw_horizon(frame_copy, horizon['angle'], horizon['offset'], is_good_horizon)
+            # draw HUD
+            draw_hud(frame_copy, horizon['angle'], horizon['offset'], is_good_horizon, gv.recording)
+            # draw aileron
+            frame_copy = draw_servos(frame_copy, aileron_value)
+            # show image
             cv2.imshow("Real-time Display", frame_copy)
-            # cv2.imwrite(f'images/{n}.png', frame) # save individual frames for diagnostics
 
         # add frame to recording queue
         if gv.recording:
@@ -206,26 +245,7 @@ def main():
             else:
                 # save diagnostic about recording
                 if horizon_detection:
-                    # save metadata about recording
-                    metadata['fps'] = FPS
-                    metadata['datetime'] = dt_string
-                    metadata['total_frames'] = next(recording_frame_iter)
-                    metadata['resolution'] = RESOLUTION_STR
-                    datadict['metadata'] = metadata
-                    datadict['frames'] = frames
-
-                    # wait for video_writer to finish recording      
-                    while video_writer.run:
-                        sleep(.1) 
-
-                    # save the json file
-                    with open(f'recordings/{dt_string}.txt', 'w') as convert_file: 
-                        convert_file.write(json.dumps(datadict))
-
-                    # clear out the diagnostic data dictionaries, we are done with them for now
-                    datadict = {}
-                    metadata = {}
-                    frame_data = {}
+                    finish_recording()
 
         # DYNAMIC WAIT
         # Figure out how much longer we need to wait in order 
@@ -237,7 +257,7 @@ def main():
         if addl_time_to_wait > 0:
             sleep(addl_time_to_wait)
 
-        # record the fps
+        # record the actual fps
         t_final = timer()
         actual_fps = 1/(t_final - t1)
         t1 = timer()
@@ -246,7 +266,11 @@ def main():
         # increment the frame count for the whole runtime           
         n += 1
     
-    # clean up and finish program
+    # CLEAN UP AND FINISH PROGRAM
+    # Stop the recording if it hasn't already been stopped. 
+    if gv.recording and horizon_detection:
+        gv.recording = not gv.recording
+        finish_recording()
     average_fps = np.mean(fps_list)
     print(f'main loop average fps: {average_fps}')
     video_capture.release()
