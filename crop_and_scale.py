@@ -2,13 +2,19 @@ import cv2
 import numpy as np
 
 def get_cropping_and_scaling_parameters(original_resolution: tuple, new_resolution: int) -> dict:
+    """
+    original_resolution: resolution of the original, unscaled frame
+    new_resolution: desired resolution for performing inferences, genereally much
+                    smaller than original_resolution, e.g. (100, 100)
+    """
     new_aspect_ratio = new_resolution[0] / new_resolution[1]
     original_aspect_ratio = original_resolution[0] / original_resolution[1]
 
     if new_aspect_ratio > original_aspect_ratio:
         print(f"Requested aspect ratio of {new_aspect_ratio} is wider than original aspect ratio of {original_aspect_ratio}. "\
-                "This is not allowed. Please choose a different desired width and desired height.")
-        return None
+                "This is not allowed.")
+        new_aspect_ratio = original_aspect_ratio
+        print(f'Aspect ratio of {new_aspect_ratio} will be used instead.')
 
     # define some variables related to cropping
     height = original_resolution[1]

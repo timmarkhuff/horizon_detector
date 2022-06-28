@@ -137,7 +137,7 @@ def find_horizon(frame:np.ndarray,
         desired_height = 500
         scale_factor = desired_height / frame.shape[0]
         desired_width = int(np.round(frame.shape[1] * scale_factor))
-        desired_dimensions = (desired_height, desired_width)
+        desired_dimensions = (desired_width, desired_height)
         mask = cv2.resize(mask, desired_dimensions)
         bgr2gray = cv2.resize(bgr2gray, desired_dimensions)
         blur = cv2.resize(blur, desired_dimensions)
@@ -177,7 +177,7 @@ def find_horizon(frame:np.ndarray,
     # polyfit
     m, b = np.polyfit(x_filtered, y_filtered, 1)
     angle = atan2(m,1)
-    offset = (m * frame.shape[1]/2 + b) / frame.shape[1]
+    offset = (m * frame.shape[1]/2 + b) / frame.shape[0]
 
     # determine the direction of the sky (above or below)
     if m * avg_x + b > avg_y:

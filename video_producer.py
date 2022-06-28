@@ -97,7 +97,7 @@ def main():
             writer.write(frame)
             
             # show results
-            cv2.imshow(output_video_name, frame)
+            cv2.imshow(f'Producing {output_video_name}...', frame)
 
             # check pressed keys 
             key = cv2.waitKey(1)

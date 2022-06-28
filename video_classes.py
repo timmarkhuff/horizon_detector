@@ -49,26 +49,25 @@ class CustomVideoCapture:
 
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
-    def get_frames_from_webcam(self):
-        t1 = timer()
+    def get_frames_from_camera(self):
+        self.t1 = timer()
+        self.number_of_frames = 0
         while self.run:
             ret, self.frame = self.cap.read()
-            t2 = timer()
-            fps = 1 / (t2 - t1)
-            t1 = timer()
-            self.fps_list.append(fps)
-            if ret == False:
+            if ret:
+                self.number_of_frames += 1
+            else:
                 print('Cannot get frames. Ending program.')
                 self.run = False
                 self.release()
 
     def get_frames_from_video_file(self):
         while self.run:
-            t1 = timer()
             if self.queue.full():
                 sleep(1) # wait a bit for the main loop to catch up
                 continue # terminate the current iteration of the loop early
             else:
+                sleep(.01)
                 ret, frame = self.cap.read()
             
             if ret == False:
@@ -77,10 +76,6 @@ class CustomVideoCapture:
                 break
             else:
                 self.queue.put(frame)
-            t2 = timer()
-            fps = 1 / (t2 - t1)
-            self.fps_list.append(fps)
-
 
     def read_frame(self):
         # if using webcam
@@ -90,7 +85,6 @@ class CustomVideoCapture:
         # if streaming from a video file
         if self.queue.empty():
             print('No more frames left in the CustomVideoCapture queue.')
-            # self.release()
             return None
         else:
             frame = self.queue.get()
@@ -100,7 +94,7 @@ class CustomVideoCapture:
         self.run = True
         print(f'using_camera: {self.using_camera}')
         if self.using_camera:
-            Thread(target=self.get_frames_from_webcam).start()
+            Thread(target=self.get_frames_from_camera).start()
         else:
             Thread(target=self.get_frames_from_video_file).start()
             
@@ -109,8 +103,11 @@ class CustomVideoCapture:
         self.cap.set(4, resolution[1])
 
     def release(self):
-        average_fps = np.average(self.fps_list)
-        print(f'CustomVideoCapture average FPS: {average_fps}')
+        if self.using_camera:
+            self.t2 = timer()
+            time_elapsed = self.t2 - self.t1
+            average_fps = self.number_of_frames / time_elapsed
+            print(f'CustomVideoCapture average FPS: {average_fps}')
         self.run = False
         self.cap.release()
 
@@ -136,7 +133,7 @@ class CustomVideoWriter:
             speaker.add_to_queue(f'Recording in {self.resolution} at {self.fps} FPS.')
             while gv.recording or not self.queue.empty():
                 if self.queue.empty():
-                    sleep(1)
+                    sleep(.1)
                     continue
                 else:
                     frame = self.queue.get()
