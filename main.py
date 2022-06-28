@@ -7,6 +7,7 @@ from time import sleep
 from timeit import default_timer as timer
 from itertools import count
 from datetime import datetime
+from math import sqrt
 
 # my libraries
 from video_classes import CustomVideoCapture, CustomVideoWriter
@@ -98,10 +99,9 @@ def main():
 
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
-    EXCLUSION_THRESH = video_capture.resolution[1] * .04
-    if not crop_and_scale_parameters:
-        print('Could not get cropping and scaling parameters.')
-        return
+    
+    # define the exclusion threshold in terms of the diagonal of INFERENCE_RESOLUTION
+    EXCLUSION_THRESH = sqrt(INFERENCE_RESOLUTION[0] ** 2 + INFERENCE_RESOLUTION[1] ** 2) * .1
 
     # Keep track of the two most recent horizons
     # to predict the approximate area of the current horizon.

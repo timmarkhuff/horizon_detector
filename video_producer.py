@@ -85,6 +85,7 @@ def main():
             angle = datadict['frames'][dict_key]['angle']
             offset = datadict['frames'][dict_key]['offset']
             is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
+            aileron_value = datadict['frames'][dict_key]['aileron_value']
 
             # draw the horizon
             if angle != 'null':            
@@ -92,6 +93,9 @@ def main():
 
             # draw HUD
             frame = draw_hud(frame, angle, offset, is_good_horizon)
+
+            # draw aileron
+            frame = draw_servos(frame, aileron_value)
 
             # send the frame to the queue to be recorded
             writer.write(frame)
