@@ -165,12 +165,12 @@ def find_horizon(frame:np.ndarray,
             predicted_angle = predicted_angle / (2 * pi)
             mask = draw_horizon(mask, predicted_angle, predicted_offset, False)
         
-        # draw the diagnostic mask
+        # draw the results
         cv2.imshow("mask", mask)
         cv2.imshow("bgr2gray", bgr2gray)
         cv2.imshow("blur", blur)
     
-    # return None values for horizon, since too few points were found
+    # Return None values for horizon, since too few points were found.
     if x_filtered.shape[0] < 3:
         return horizon 
 

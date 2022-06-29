@@ -7,7 +7,6 @@ from time import sleep
 from timeit import default_timer as timer
 from itertools import count
 from datetime import datetime
-from math import sqrt
 
 # my libraries
 from video_classes import CustomVideoCapture, CustomVideoWriter
@@ -50,7 +49,6 @@ def main():
         """
         Finishes up the recording and saves the diagnostic data file.
         """
-
         # count the number of high confidence horizons
         high_conf_horizons = 0
         for value in datadict['frames'].values():
@@ -100,8 +98,10 @@ def main():
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
     
-    # define the exclusion threshold in terms of the diagonal of INFERENCE_RESOLUTION
-    EXCLUSION_THRESH = sqrt(INFERENCE_RESOLUTION[0] ** 2 + INFERENCE_RESOLUTION[1] ** 2) * .1
+    # Define the exclusion threshold in terms of the height of INFERENCE_RESOLUTION.
+    # EXCLUSION_THRESH is the distance from the previous horizon beyond which  
+    # contour points will be filtered out.
+    EXCLUSION_THRESH = INFERENCE_RESOLUTION[0] * .1
 
     # Keep track of the two most recent horizons
     # to predict the approximate area of the current horizon.
@@ -113,15 +113,15 @@ def main():
     video_capture.start_stream()
     sleep(1)
     
-    # define servos
-    aileron_value = 0
-    if gv.os == "Linux":
-        from gpiozero import Servo
-        from gpiozero.pins.pigpio import PiGPIOFactory
-        factory = PiGPIOFactory()
-        servo = Servo(17, pin_factory=factory)
-        servo.value = 0
-        sleep(2)
+    # # define servos
+    # aileron_value = 0
+    # if gv.os == "Linux":
+    #     from gpiozero import Servo
+    #     from gpiozero.pins.pigpio import PiGPIOFactory
+    #     factory = PiGPIOFactory()
+    #     servo = Servo(17, pin_factory=factory)
+    #     servo.value = 0
+    #     sleep(2)
 
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
@@ -160,9 +160,9 @@ def main():
         else:
             aileron_value = None
         
-        # actuate the servos
-        if auto_pilot and gv.os == "Linux" and aileron_value: 
-            servo.value = aileron_value          
+        # # actuate the servos
+        # if auto_pilot and gv.os == "Linux" and aileron_value: 
+        #     servo.value = aileron_value          
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:

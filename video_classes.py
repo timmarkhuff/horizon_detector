@@ -1,6 +1,5 @@
 # standard libraries
 import cv2
-import numpy as np
 import os
 from queue import Queue
 from threading import Thread
@@ -47,7 +46,12 @@ class CustomVideoCapture:
 
         speaker.add_to_queue(f'resolution: {self.resolution}')
 
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+        # fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # fourcc = cv2.VideoWriter_fourcc(*'h264')
+        # fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
 
     def get_frames_from_camera(self):
         self.t1 = timer()
@@ -125,19 +129,25 @@ class CustomVideoWriter:
         fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
         self.writer = cv2.VideoWriter(f'recordings/{self.filename}', fourcc, fps, self.resolution)
         self.queue = Queue()
-        self.recording = False
 
     def start_writing(self):
         def thread():
             self.run = True
             speaker.add_to_queue(f'Recording in {self.resolution} at {self.fps} FPS.')
+            self.time_spent_writing = 0
+            self.frames_written = 0
             while gv.recording or not self.queue.empty():
                 if self.queue.empty():
                     sleep(.1)
                     continue
                 else:
+                    t1 = timer()
                     frame = self.queue.get()
                     self.writer.write(frame)
+                    t2 = timer()
+                    elapsed_time = t2 - t1
+                    self.time_spent_writing += elapsed_time
+                    self.frames_written += 1
             self.stop()
             speaker.add_to_queue(f"Recording stopped.")
         Thread(target=thread).start()
@@ -145,6 +155,8 @@ class CustomVideoWriter:
     def stop(self):
         self.writer.release()
         self.run = False
+        fps = self.frames_written / self.time_spent_writing
+        print(f'CustomVideoWriter fps: {fps}')
 
 
 
