@@ -54,6 +54,7 @@ def find_horizon(frame:np.ndarray,
     horizon = {}
     horizon['angle'] = None
     horizon['offset'] = None
+    horizon['offset_new'] = None
     horizon['variance'] = None
     horizon['m'] = None
     horizon['b'] = None
@@ -163,7 +164,7 @@ def find_horizon(frame:np.ndarray,
         if predicted_angle:
             # normalize the angle
             predicted_angle = predicted_angle / (2 * pi)
-            mask = draw_horizon(mask, predicted_angle, predicted_offset, False)
+            mask = draw_horizon(mask, predicted_angle, predicted_offset, 0,  False)
         
         # draw the results
         cv2.imshow("mask", mask)
@@ -185,29 +186,29 @@ def find_horizon(frame:np.ndarray,
     else:
         sky_is_up = 0 # below
 
-    # FIND PITCH (WORK IN PROGRESS)
-    # # define two points along horizon
-    # p1 = np.array([0, b])
-    # p2 = np.array([frame.shape[0], m*frame.shape[0]+b])
-    # # center of the image
-    # p3 = np.array([frame.shape[1]//2, frame.shape[1]//2]) 
-    # frame_diagonal = sqrt(frame.shape[0]**2 + frame.shape[1]**2)
-    # # find out if plane is pointing above or below horizon
-    # if p3[1] < m * frame.shape[1]//2 + b and sky_is_up:
-    #     plane_pointing_up = 1
-    # elif p3[1] > m *frame.shape[1]//2 + b and sky_is_up == False:
-    #     plane_pointing_up = 1
-    # else:
-    #     plane_pointing_up = 0
+    # FIND PITCH 
+    # define two points along horizon
+    p1 = np.array([0, b])
+    p2 = np.array([frame.shape[1], m * frame.shape[1] + b])
+    # center of the image
+    p3 = np.array([frame.shape[1]//2, frame.shape[0]//2]) 
+    frame_diagonal = sqrt(frame.shape[0]**2 + frame.shape[1]**2)
+    # find out if plane is pointing above or below horizon
+    if p3[1] < m * frame.shape[1]//2 + b and sky_is_up:
+        plane_pointing_up = 1
+    elif p3[1] > m *frame.shape[1]//2 + b and sky_is_up == False:
+        plane_pointing_up = 1
+    else:
+        plane_pointing_up = 0
 
-    # distance_to_horizon = norm(np.cross(p2-p1, p1-p3))/norm(p2-p1) / frame_diagonal
-    # if plane_pointing_up:
-    #     offset_new = .5 - distance_to_horizon
-    # else:
-    #     offset_new = .5 + distance_to_horizon
-    # print(f'plane_pointing_up: {plane_pointing_up} | offset_new: {offset_new}')
+    distance_to_horizon = norm(np.cross(p2-p1, p1-p3))/norm(p2-p1) / frame_diagonal
+    if plane_pointing_up:
+        offset_new = .5 - distance_to_horizon
+    else:
+        offset_new = .5 + distance_to_horizon
 
-    # find the variance (this will be treated as a confidence score)
+    # FIND VARIANCE 
+    # (this will be treated as a confidence score)
     p1 = np.array([0, b])
     p2 = np.array([frame.shape[1], m * frame.shape[1] + b])
     p2_minus_p1 = p2 - p1
@@ -229,12 +230,25 @@ def find_horizon(frame:np.ndarray,
     horizon = {}
     horizon['angle'] = angle
     horizon['offset'] = offset
+    horizon['offset_new'] = offset_new
     horizon['variance'] = variance
     horizon['m'] = m
     horizon['b'] = b
 
     # return the calculated values for horizon
     return horizon 
+
+def get_pitch(offset: float, inf_fov_diag: float) -> float:
+    """
+    Takes the normalized offset and returns the pitch in degrees
+    based on the diagonal field of view of the inference image (inf_fov_diag).
+    """
+    if offset is None:
+        return None
+
+    # shift the normalized offset to an offset range -1 to 1
+    offset_pos_neg = 2 * offset - 1 
+    return -1 * offset_pos_neg * inf_fov_diag / 2
 
 if __name__ == "__main__":
     # load the image

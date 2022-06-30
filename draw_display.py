@@ -1,20 +1,47 @@
 import cv2
 import numpy as np
-from math import cos, sin, pi, degrees
+from math import cos, sin, pi, degrees, sqrt
 
 FULL_ROTATION = 2 * pi
 
-def draw_hud(frame: np.ndarray, angle:float , offset_normalized: float, 
+def draw_roi(frame: np.ndarray, crop_and_scale_parameters: dict) -> np.ndarray:
+    """
+    Draws the region of interest onto the frame, i.e. the region where 
+    horizon detection occurs.
+
+    frame: the frame to draw on
+    crop_and_scale_parameters: parameters obtained by crop_and_scale.get_cropping_and_scaling_parameters
+    """
+    # extract some relevant values from the dictionary
+    cropping_start= crop_and_scale_parameters['cropping_start']
+    cropping_end = crop_and_scale_parameters['cropping_end']
+    p1 = (cropping_start, 0)
+    p2 = (cropping_start, frame.shape[1])
+    p3 = (cropping_end, 0)
+    p4 = (cropping_end, frame.shape[1])
+
+    # define the color
+    off_white = (215, 215, 215)
+
+    # draw the lines
+    cv2.line(frame, p1, p2, off_white, 1)
+    cv2.line(frame, p3, p4, off_white, 1)
+
+
+def draw_hud(frame: np.ndarray, angle:float , pitch: float, 
                 is_good_horizon: bool, recording: bool = False) -> np.ndarray:
-    # draw angle
+    # draw angle and pitch text
     if angle and is_good_horizon:
         angle_degrees = degrees(angle * 2 * pi)
         angle_degrees = int(np.round(angle_degrees))
+        pitch = int(np.round(pitch))
         color = (255, 0, 0)
     else:
         angle_degrees = ''
+        pitch = ''
         color = (0,0,255)
-    cv2.putText(frame, f"Angle: {angle_degrees}",(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,color,1,cv2.LINE_AA)
+    cv2.putText(frame, f"Roll: {angle_degrees}",(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,color,1,cv2.LINE_AA)
+    cv2.putText(frame, f"Pitch: {pitch}",(20,80),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,color,1,cv2.LINE_AA)
 
     # draw center circle
     x = frame.shape[1]//2
@@ -31,7 +58,12 @@ def draw_hud(frame: np.ndarray, angle:float , offset_normalized: float,
 
     return frame
 
-def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, is_good_horizon: bool) -> np.ndarray:
+def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, offset_new: float, 
+                is_good_horizon: bool, inf_res: tuple = None) -> np.ndarray:
+
+    if inf_res is None:
+        inf_res = frame.shape[:2][::1]
+
     # if no horizon data is provided, terminate function early and
     # return provided frame
     if angle is None:
@@ -61,11 +93,27 @@ def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, is_g
     p2_y = int(np.round(m * frame.shape[1] + b))
     p2_horizon = (p2_x, p2_y)
 
+    # # WORK IN PROGRESS 
+    # # define the horizon line v2
+    # if offset_new < .5:
+    #     plane_is_pointing_up = True
+    #     offset_angle = angle + .5 * pi
+    # else:
+    #     plane_is_pointing_up = False
+    #     offset_angle = angle + 1.5 * pi
+    #     offset_new -= .5
+
+    # scale_factor = frame.shape[0] / inf_res[1]
+    # inf_diag = sqrt(inf_res[0] ** 2 + inf_res[1] ** 2)
+    # max_distance = inf_diag * scale_factor
+
+    # distance = offset_new * max_distance
+    # print(f'distance: {distance}')
+
     # define the ground line
     if is_good_horizon:
         m_groundline = -1/m
         b_groundline = frame.shape[0]//2 - m_groundline * frame.shape[1]//2
-        # b = offset - m * .5 * frame.shape[1]
         # find the points to be drawn
         p1_x = int(np.round((b_groundline - b) / (m - m_groundline)))
         p1_y = int(np.round(m * p1_x + b))
@@ -78,10 +126,10 @@ def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, is_g
             p2_x = int(np.round(-1 * b_groundline / m_groundline))
         p2 = (p2_x, p2_y)
         # draw the ground line
-        frame = cv2.line(frame, p1, p2, (0,191,255), 1)
+        cv2.line(frame, p1, p2, (0,191,255), 1)
 
     # draw the horizon
-    frame = cv2.line(frame, p1_horizon, p2_horizon, horizon_color, 2)
+    cv2.line(frame, p1_horizon, p2_horizon, horizon_color, 2)
 
     return frame
 
@@ -150,24 +198,4 @@ def draw_servos(frame: np.ndarray, aileron_value) -> np.ndarray:
     cv2.rectangle(frame, pt1, pt2, (0,200,200), 2)
 
     return frame
-
-if __name__ == "__main__":
-    path = 'training_data/sample_images/sample_horizon.png'
-    frame = cv2.imread(path)
-    frame = draw_servos(frame, 6)
-    cv2.imshow("Servos", frame)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    # # Horizon Demonstration
-    # path = 'training_data/sample_images/sample_horizon.png'
-    # angle = 0.5478363265396572
-    # offset = 0.279784140969163
-    # good_horizon = True
-    # frame = cv2.imread(path)
-    # frame = draw_horizon(frame, angle, offset, good_horizon)
-    # cv2.imshow("draw_horizon demo", frame)
-    # key = cv2.waitKey(0)
-    # if key == ord('q'):
-    #     cv2.destroyAllWindows()
     

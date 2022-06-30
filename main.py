@@ -7,13 +7,14 @@ from time import sleep
 from timeit import default_timer as timer
 from itertools import count
 from datetime import datetime
+from math import sqrt
 
 # my libraries
 from video_classes import CustomVideoCapture, CustomVideoWriter
 import global_variables as gv
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
-from find_horizon import find_horizon
-from draw_display import draw_horizon, draw_servos, draw_hud
+from find_horizon import find_horizon, get_pitch
+from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
 from text_to_speech import speaker
 from servos import get_aileron_value
 
@@ -31,16 +32,46 @@ def main():
     parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
     help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
     parser.add_argument('--fps', help=help_text, default='20', type=int)       
-
     args = parser.parse_args()
 
-    # globals
+    # General Constants
     SOURCE = args.source
     RESOLUTION_STR = args.res
     RESOLUTION = tuple(map(int, RESOLUTION_STR.split('x')))
     INFERENCE_RESOLUTION_STR = args.inf_res
     INFERENCE_RESOLUTION = tuple(map(int, INFERENCE_RESOLUTION_STR.split('x')))
-    FPS = args.fps 
+    FPS = args.fps
+
+    # Validate INFERENCE_RESOLUTION
+    # check if the inference resolution is too tall
+    if INFERENCE_RESOLUTION[1] > RESOLUTION[1]:
+        print(f'Specified inference resolution of {INFERENCE_RESOLUTION} is '\
+            f' taller than the resolution of {RESOLUTION}. This is not allowed.')
+        INFERENCE_RESOLUTION_STR = "100x100" # the recommend inference resolution
+        INFERENCE_RESOLUTION = (100, 100) # the recommend inference resolution
+        print(f'Inference resolution has been adjusted to the recommended '\
+            f'resolution of {INFERENCE_RESOLUTION}.')
+    # check if the inference aspect ratio is too wide
+    inference_aspect_ratio = INFERENCE_RESOLUTION[0]/INFERENCE_RESOLUTION[1]
+    aspect_ratio = RESOLUTION[0]/RESOLUTION[1]
+    if inference_aspect_ratio > aspect_ratio:
+        print(f'The specified inference aspect ratio of {inference_aspect_ratio} is '\
+                f'wider than the aspect ratio of {aspect_ratio}. This is not allowed')
+        inference_height = INFERENCE_RESOLUTION[1]
+        inference_width = int(np.round(INFERENCE_RESOLUTION[1] * aspect_ratio))
+        INFERENCE_RESOLUTION = (inference_width, inference_height)
+        print(f'The inference resolution has been adjusted to: {INFERENCE_RESOLUTION}')
+
+    # Field of View Constants
+    # FOV constants for Raspberry Pi Camera v2
+    # source: https://www.raspberrypi.com/documentation/accessories/camera.html
+    FOV_H = 62.2  
+    FOV_V = 48.8
+    INF_FOV_H = (INFERENCE_RESOLUTION[0] / INFERENCE_RESOLUTION[1]) / (RESOLUTION[0] / RESOLUTION[1]) * FOV_H
+    INF_FOV_V = FOV_V
+    INF_FOV_DIAG = sqrt(INF_FOV_H ** 2 + INF_FOV_V **2)
+
+    # global variables
     horizon_detection = True
     auto_pilot = False
 
@@ -78,7 +109,7 @@ def main():
 
         # save the json file
         print('Saving diagnostic data...')
-        with open(f'recordings/{dt_string}.txt', 'w') as convert_file: 
+        with open(f'recordings/{dt_string}.json', 'w') as convert_file: 
             convert_file.write(json.dumps(datadict))
         print('Diagnostic data saved.')
 
@@ -137,6 +168,9 @@ def main():
             # find the horizon
             horizon = find_horizon(scaled_and_cropped_frame, predicted_angle, predicted_offset, EXCLUSION_THRESH, diagnostic_mode=True)
 
+            # get the pitch
+            pitch = get_pitch(horizon['offset_new'], INF_FOV_DIAG)
+
             # check the variance to determine if this is a good horizon 
             accetable_variance = 1.3 # percentage of the image height that is considered an acceptable variance
             if horizon['variance'] and horizon['variance'] < accetable_variance: 
@@ -173,6 +207,8 @@ def main():
             frame_data = {}
             frame_data['angle'] = horizon['angle']
             frame_data['offset'] = horizon['offset']
+            frame_data['offset_new'] = horizon['offset_new']
+            frame_data['pitch'] = pitch
             frame_data['is_good_horizon'] = is_good_horizon
             frame_data['actual_fps'] = actual_fps
             frame_data['aileron_value'] = aileron_value
@@ -180,13 +216,18 @@ def main():
          
         if gv.render_image:
             frame_copy = frame.copy() # copy the frame so that we have an unmarked frame to draw on
+            # draw roi
+            draw_roi(frame_copy, crop_and_scale_parameters)
             # draw horizon
             if horizon['angle']:
-                frame_copy = draw_horizon(frame_copy, horizon['angle'], horizon['offset'], is_good_horizon)
+                angle = horizon['angle']
+                offset = horizon['offset']
+                offset_new = horizon['offset_new']
+                draw_horizon(frame_copy, angle, offset, offset_new, is_good_horizon, INFERENCE_RESOLUTION)
             # draw HUD
-            draw_hud(frame_copy, horizon['angle'], horizon['offset'], is_good_horizon, gv.recording)
+            draw_hud(frame_copy, horizon['angle'], pitch, is_good_horizon, gv.recording)
             # draw aileron
-            frame_copy = draw_servos(frame_copy, aileron_value)
+            draw_servos(frame_copy, aileron_value)
             # show image
             cv2.imshow("Real-time Display", frame_copy)
 

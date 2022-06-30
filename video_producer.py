@@ -6,8 +6,8 @@ import json
 from timeit import default_timer as timer
 
 # my libraries
-from draw_display import draw_horizon, draw_servos, draw_hud
-# from draw_horizon import draw_horizon
+from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
+from crop_and_scale import get_cropping_and_scaling_parameters
 
 def main():
     # check if the folder exists, if not, create it
@@ -31,7 +31,7 @@ def main():
         
         # check if this video has a corresponding txt file
         filename = item.replace(f'.{file_extension}', '')
-        if filename + '.txt' not in items:
+        if filename + '.json' not in items:
             continue
         
         # check if the video has already been produced
@@ -57,13 +57,16 @@ def main():
         video_name = video.replace(f'.{video_extension}', '')
 
         # Open JSON file
-        with open(f'{recordings_path}/{video_name}.txt') as json_file:
+        with open(f'{recordings_path}/{video_name}.json') as json_file:
             datadict = json.load(json_file)
 
         # extract some values from the metadata
         fps = datadict['metadata']['fps']
         resolution_str = datadict['metadata']['resolution']
+        inf_resolution_str = datadict['metadata']['inference_resolution']
+
         resolution = tuple(map(int, resolution_str.split('x')))
+        inf_resolution = tuple(map(int, inf_resolution_str.split('x')))
 
         # define video_capture
         source = f'{recordings_path}/{video_name}.{video_extension}'
@@ -73,6 +76,10 @@ def main():
         output_video_path = f'{recordings_path}/{video_name}_output.{video_extension}'
         fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
         writer = cv2.VideoWriter(output_video_path, fourcc, fps, resolution)
+
+        # get some parameters for cropping and scaling
+        # in this context, this will be used for draw_roi
+        crop_and_scale_parameters = get_cropping_and_scaling_parameters(resolution, inf_resolution)
 
         frame_num = 0
         while True:
@@ -84,18 +91,23 @@ def main():
             dict_key = str(frame_num)
             angle = datadict['frames'][dict_key]['angle']
             offset = datadict['frames'][dict_key]['offset']
+            offset_new = datadict['frames'][dict_key]['offset_new']
+            pitch = datadict['frames'][dict_key]['pitch']
             is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
             aileron_value = datadict['frames'][dict_key]['aileron_value']
 
+            # draw_roi
+            draw_roi(frame, crop_and_scale_parameters)
+
             # draw the horizon
             if angle != 'null':            
-                frame = draw_horizon(frame, angle, offset, is_good_horizon)
+                draw_horizon(frame, angle, offset, offset_new, is_good_horizon)
 
             # draw HUD
-            frame = draw_hud(frame, angle, offset, is_good_horizon)
+            draw_hud(frame, angle, pitch, is_good_horizon)
 
             # draw aileron
-            frame = draw_servos(frame, aileron_value)
+            draw_servos(frame, aileron_value)
 
             # send the frame to the queue to be recorded
             writer.write(frame)
