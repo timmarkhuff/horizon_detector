@@ -90,6 +90,19 @@ def find_horizon(frame:np.ndarray,
     bool_mask = np.logical_and(x_abbr > 2, x_abbr < (frame.shape[1] - 2))
     x_abbr = x_abbr[bool_mask]
     y_abbr = y_abbr[bool_mask]
+    
+#     # WORK IN PROGRESS
+#     # remove corner points
+#     x_list = []
+#     y_list = []
+#     for idx, x_point in enumerate(x_abbr):
+#         y_point = y_abbr[idx]
+#         upper_left = x_point == 0 and 
+#         if not any([x_point == 0, x_point == frame.shape[1], y_point == 0, y_point == frame.shape[0]]):
+#             x_list.append(x_point)
+#             y_list.append(y_point)
+#     x_abbr = np.array(x_list)
+#     y_abbr = np.array(y_list)            
         
     # if a previous horizon was provided, exclude any points from this
     # horizon that are too far away from the previous horizon

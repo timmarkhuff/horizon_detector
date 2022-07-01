@@ -116,18 +116,14 @@ class CustomVideoCapture:
         self.cap.release()
 
 class CustomVideoWriter:
-    def __init__(self, filename, resolution=(1280, 720), fps=30):
+    def __init__(self, filename, file_path, resolution=(1280, 720), fps=30):
         self.filename = filename
+        self.file_path = file_path
         self.resolution = resolution
         self.fps = fps
 
-        # check if the folder exists, if not, create it
-        recordings_path = "recordings"
-        if not os.path.exists(recordings_path):
-            os.makedirs(recordings_path)
-
         fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
-        self.writer = cv2.VideoWriter(f'recordings/{self.filename}', fourcc, fps, self.resolution)
+        self.writer = cv2.VideoWriter(f'{self.file_path}/{self.filename}', fourcc, fps, self.resolution)
         self.queue = Queue()
 
     def start_writing(self):

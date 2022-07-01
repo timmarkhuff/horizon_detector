@@ -1,5 +1,6 @@
 # standard libraries
 import cv2
+import os
 import numpy as np
 from argparse import ArgumentParser
 import json
@@ -17,6 +18,8 @@ from find_horizon import find_horizon, get_pitch
 from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
 from text_to_speech import speaker
 from servos import get_aileron_value
+from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
+from button import CustomButton
 
 def main():
     print('----------STARTING HORIZON DETECTOR----------')
@@ -26,12 +29,12 @@ def main():
     parser.add_argument('--source', help=help_text, default='0', type=str)     
     help_text = 'Default resolution used when streaming from camera. Not used when streaming from video file. '\
                    'Options include: 640x480, 1280x720 and 1920x1080.'
-    parser.add_argument('--res', help=help_text, default='1280x720', type=str)
+    parser.add_argument('--res', help=help_text, default='640x480', type=str)
     help_text = 'Resolution of image upon which inferences will be peformed. Smaller size means faster inferences. '\
                     'Cannot be wider than resolution of input image.'
     parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
     help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
-    parser.add_argument('--fps', help=help_text, default='20', type=int)       
+    parser.add_argument('--fps', help=help_text, default='30', type=int)       
     args = parser.parse_args()
 
     # General Constants
@@ -76,6 +79,25 @@ def main():
     auto_pilot = False
 
     # functions
+    def determine_file_path():
+        """
+        choose where to write the video output and detection data
+        """
+        # check if there is a thumbdrive that can be used
+        supported_thumbdrives = ['Cruzer', 'SAMSUNG USB', '329A-3084']
+        for i in supported_thumbdrives:
+            file_path = f'/media/pi/{i}'
+            if os.path.exists(file_path):
+                break
+        else:
+            file_path = 'recordings'
+            
+        # check if the folder exists, if not, create it
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
+            
+        return file_path
+
     def finish_recording():
         """
         Finishes up the recording and saves the diagnostic data file.
@@ -109,7 +131,7 @@ def main():
 
         # save the json file
         print('Saving diagnostic data...')
-        with open(f'recordings/{dt_string}.json', 'w') as convert_file: 
+        with open(f'{file_path}/{dt_string}.json', 'w') as convert_file: 
             convert_file.write(json.dumps(datadict))
         print('Diagnostic data saved.')
 
@@ -144,6 +166,15 @@ def main():
     video_capture.start_stream()
     sleep(1)
     
+    # disable wifi and bluetooth on raspberry pi 
+    if gv.os == "Linux":
+        wifi_response, bluetooth_response = disable_wifi_and_bluetooth()
+        speaker.add_to_queue(f'{wifi_response} {bluetooth_response}')
+        
+        # create the button for starting recordings
+        recording_button = CustomButton(pin=17)
+        recording_button.start()
+        
     # # define servos
     # aileron_value = 0
     # if gv.os == "Linux":
@@ -234,9 +265,17 @@ def main():
         # add frame to recording queue
         if gv.recording:
             video_writer.queue.put(frame)
-
-        # wait and check for pressed keys
+        
+        # CHECK FOR INPUT
+        # Wait and check for pressed keys
         key = cv2.waitKey(1)
+        # Check if the button has been pressed on the Raspberry Pi
+        if gv.os == "Linux":
+            recording_button_has_been_pressed = recording_button.check_status()
+        else:
+            # set the button status to false if the program is not running on Raspberry Pi
+            recording_button_has_been_pressed = False
+        # Evaluate which keys and buttons have been pressed
         if key == ord('q'):
             break
         elif key == ord('d'):
@@ -256,7 +295,7 @@ def main():
                 speaker.add_to_queue(f'Auto-pilot: {auto_pilot}')
             else:
                 speaker.add_to_queue('Cannot enable autopilot without horizon detection.')
-        elif key == ord('r'):
+        elif key == ord('r') or recording_button_has_been_pressed:
             gv.recording = not gv.recording
             if gv.recording:
                 # start the recording
@@ -269,7 +308,8 @@ def main():
                 filename = f'{dt_string}.avi'
 
                 # start the CustomVideoWriter
-                video_writer = CustomVideoWriter(filename, video_capture.resolution, FPS)
+                file_path = determine_file_path()
+                video_writer = CustomVideoWriter(filename, file_path, video_capture.resolution, FPS)
                 video_writer.start_writing()
 
                 # create some dictionaries to save the diagnostic data
@@ -311,7 +351,9 @@ def main():
     speaker.release()
     cv2.destroyAllWindows()
     gv.recording = False
-    gv.run = False      
+    gv.run = False
+    if gv.os == "Linux":
+        recording_button.release()
     sleep(1) 
     print('---------------------END---------------------')
 
