@@ -17,9 +17,9 @@ from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import find_horizon, get_pitch
 from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
 from text_to_speech import speaker
-from servos import get_aileron_value
+from flight_controller import get_aileron_value
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
-from button import CustomButton
+from switches_and_servos import TransmitterSwitch
 
 def main():
     print('----------STARTING HORIZON DETECTOR----------')
@@ -166,15 +166,20 @@ def main():
     video_capture.start_stream()
     sleep(1)
     
-    # disable wifi and bluetooth on raspberry pi 
+    # perform some start-up operations specific to the Raspberry Pi
     if gv.os == "Linux":
+        # import package for handling GPIO pins
+        import pigpio
+        
+        # disable wifi and bluetooth on Raspberry Pi
         wifi_response, bluetooth_response = disable_wifi_and_bluetooth()
         speaker.add_to_queue(f'{wifi_response} {bluetooth_response}')
         
-        # create the button for starting recordings
-        recording_button = CustomButton(pin=17)
-        recording_button.start()
-        
+        # create TransmitterSwitch object
+        pi = pigpio.pi()
+        gpio = 22
+        recording_switch = TransmitterSwitch(pi, gpio, 2)
+            
     # # define servos
     # aileron_value = 0
     # if gv.os == "Linux":
@@ -184,7 +189,7 @@ def main():
     #     servo = Servo(17, pin_factory=factory)
     #     servo.value = 0
     #     sleep(2)
-
+    
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
     n = 0 # frame number
@@ -267,15 +272,11 @@ def main():
             video_writer.queue.put(frame)
         
         # CHECK FOR INPUT
-        # Wait and check for pressed keys
         key = cv2.waitKey(1)
-        # Check if the button has been pressed on the Raspberry Pi
-        if gv.os == "Linux":
-            recording_button_has_been_pressed = recording_button.check_status()
+        if gv.os == 'Linux':
+            recording_switch_new_position = recording_switch.detect_position_change()
         else:
-            # set the button status to false if the program is not running on Raspberry Pi
-            recording_button_has_been_pressed = False
-        # Evaluate which keys and buttons have been pressed
+            recording_switch_new_position = None    
         if key == ord('q'):
             break
         elif key == ord('d'):
@@ -295,34 +296,37 @@ def main():
                 speaker.add_to_queue(f'Auto-pilot: {auto_pilot}')
             else:
                 speaker.add_to_queue('Cannot enable autopilot without horizon detection.')
-        elif key == ord('r') or recording_button_has_been_pressed:
+        elif (key == ord('r') or recording_switch_new_position == 1) and not gv.recording:
+            # toggle the recording flag
             gv.recording = not gv.recording
-            if gv.recording:
-                # start the recording
-                # create an interator to keep track of frame numbers within the recording
-                recording_frame_iter = count()
+            
+            # start the recording
+            # create an interator to keep track of frame numbers within the recording
+            recording_frame_iter = count()
 
-                # get datetime
-                now = datetime.now()
-                dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
-                filename = f'{dt_string}.avi'
+            # get datetime
+            now = datetime.now()
+            dt_string = now.strftime("%m.%d.%Y.%H.%M.%S")
+            filename = f'{dt_string}.avi'
 
-                # start the CustomVideoWriter
-                file_path = determine_file_path()
-                video_writer = CustomVideoWriter(filename, file_path, video_capture.resolution, FPS)
-                video_writer.start_writing()
+            # start the CustomVideoWriter
+            file_path = determine_file_path()
+            video_writer = CustomVideoWriter(filename, file_path, video_capture.resolution, FPS)
+            video_writer.start_writing()
 
-                # create some dictionaries to save the diagnostic data
-                datadict = {} # top-level dictionary that contains all diagnostic data
-                metadata = {} # metadata for the recording (resolution, fps, datetime, etc.)
-                frames = {} 
-                datadict['metadata'] = metadata
-                datadict['frames'] = frames
-            else:
-                # finish the recording
-                # save diagnostic about recording
-                if horizon_detection:
-                    finish_recording()
+            # create some dictionaries to save the diagnostic data
+            datadict = {} # top-level dictionary that contains all diagnostic data
+            metadata = {} # metadata for the recording (resolution, fps, datetime, etc.)
+            frames = {} 
+            datadict['metadata'] = metadata
+            datadict['frames'] = frames
+        elif (key == ord('r') or recording_switch_new_position == 0) and gv.recording:
+            # toggle the recording flag
+            gv.recording = not gv.recording
+            
+            # finish the recording, save diagnostic about recording
+            if horizon_detection:
+                finish_recording()
 
         # DYNAMIC WAIT
         # Figure out how much longer we need to wait in order 
@@ -352,8 +356,6 @@ def main():
     cv2.destroyAllWindows()
     gv.recording = False
     gv.run = False
-    if gv.os == "Linux":
-        recording_button.release()
     sleep(1) 
     print('---------------------END---------------------')
 
