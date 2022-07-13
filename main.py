@@ -17,9 +17,8 @@ from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import find_horizon, get_pitch
 from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
 from text_to_speech import speaker
-from flight_controller import get_aileron_value
+from flight_controller import get_aileron_value, get_elevator_value
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
-from switches_and_servos import TransmitterSwitch
 
 def main():
     print('----------STARTING HORIZON DETECTOR----------')
@@ -76,7 +75,7 @@ def main():
 
     # global variables
     horizon_detection = True
-    auto_pilot = False
+    autopilot = False
 
     # functions
     def determine_file_path():
@@ -168,27 +167,29 @@ def main():
     
     # perform some start-up operations specific to the Raspberry Pi
     if gv.os == "Linux":
-        # import package for handling GPIO pins
-        import pigpio
+        # # import package for handling GPIO pins
+        # import pigpio
+        #from gpiozero import Servo
+        #from gpiozero.pins.pigpio import PiGPIOFactory
+        from switches_and_servos import TransmitterSwitch, ServoHandler
         
         # disable wifi and bluetooth on Raspberry Pi
         wifi_response, bluetooth_response = disable_wifi_and_bluetooth()
         speaker.add_to_queue(f'{wifi_response} {bluetooth_response}')
         
         # create TransmitterSwitch object
-        pi = pigpio.pi()
-        gpio = 22
-        recording_switch = TransmitterSwitch(pi, gpio, 2)
+        recording_switch = TransmitterSwitch(13, 2)
+        autopilot_switch = TransmitterSwitch(21, 2)
             
-    # # define servos
-    # aileron_value = 0
-    # if gv.os == "Linux":
-    #     from gpiozero import Servo
-    #     from gpiozero.pins.pigpio import PiGPIOFactory
-    #     factory = PiGPIOFactory()
-    #     servo = Servo(17, pin_factory=factory)
-    #     servo.value = 0
-    #     sleep(2)
+        # define aileron servo handler
+        input_pin = 27
+        output_pin = 17
+        aileron_servo_handler = ServoHandler(input_pin, output_pin)
+        # define elevator servo handler
+        input_pin = 5
+        output_pin = 4
+        elevator_servo_handler = ServoHandler(input_pin, output_pin)
+        sleep(1)
     
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
@@ -225,14 +226,22 @@ def main():
                 predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset']
 
         # determine servo duties
-        if auto_pilot and is_good_horizon:
+        if autopilot and is_good_horizon:
             aileron_value = get_aileron_value(horizon['angle'])
+            elevator_value = get_elevator_value(pitch)
         else:
             aileron_value = None
+            elevator_value = None
         
-        # # actuate the servos
-        # if auto_pilot and gv.os == "Linux" and aileron_value: 
-        #     servo.value = aileron_value          
+        # actuate the servos
+        if gv.os == 'Linux':
+            if not autopilot:
+                aileron_servo_handler.passthrough()
+                elevator_servo_handler.passthrough(reverse=True)
+                
+            elif autopilot and aileron_value:
+                aileron_servo_handler.actuate(aileron_value)
+                elevator_servo_handler.actuate(elevator_value)
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -275,8 +284,10 @@ def main():
         key = cv2.waitKey(1)
         if gv.os == 'Linux':
             recording_switch_new_position = recording_switch.detect_position_change()
+            autopilot_switch_new_position = autopilot_switch.detect_position_change()
         else:
-            recording_switch_new_position = None    
+            recording_switch_new_position = None
+            autopilot_switch_new_position = None
         if key == ord('q'):
             break
         elif key == ord('d'):
@@ -290,12 +301,15 @@ def main():
             else:
                 horizon_detection = not horizon_detection
                 speaker.add_to_queue(f'Horizon detection: {horizon_detection}')
-        elif key == ord('a'):
-            if horizon_detection:
-                auto_pilot = not auto_pilot
-                speaker.add_to_queue(f'Auto-pilot: {auto_pilot}')
-            else:
-                speaker.add_to_queue('Cannot enable autopilot without horizon detection.')
+        elif (key == ord('a') or autopilot_switch_new_position == 1) and not autopilot:
+            autopilot = True
+            speaker.add_to_queue(f'Auto-pilot: {autopilot}')
+        elif (key == ord('a') or autopilot_switch_new_position == 0) and autopilot:
+            autopilot = False
+            speaker.add_to_queue(f'Auto-pilot: {autopilot}')
+            if gv.os == 'Linux':
+                aileron_servo_handler.actuate(0) # return the servo to center position
+                elevator_servo_handler.actuate(0) # return the servo to center position
         elif (key == ord('r') or recording_switch_new_position == 1) and not gv.recording:
             # toggle the recording flag
             gv.recording = not gv.recording

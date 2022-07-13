@@ -23,7 +23,7 @@ class CustomVideoCapture:
             self.using_camera = True
         else:
             self.using_camera = False
-            self.queue = Queue(maxsize=1000)
+            self.queue = Queue(maxsize=100)
 
         # define the VideoCapture object
         os = platform.system()
