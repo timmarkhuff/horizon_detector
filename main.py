@@ -33,7 +33,9 @@ def main():
                     'Cannot be wider than resolution of input image.'
     parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
     help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
-    parser.add_argument('--fps', help=help_text, default='30', type=int)       
+    parser.add_argument('--fps', help=help_text, default='30', type=int)
+    help_text = 'Turn the flight controller on and off.'
+    parser.add_argument('--flt_ctrl', help=help_text, default='0', type=int)  
     args = parser.parse_args()
 
     # General Constants
@@ -43,6 +45,7 @@ def main():
     INFERENCE_RESOLUTION_STR = args.inf_res
     INFERENCE_RESOLUTION = tuple(map(int, INFERENCE_RESOLUTION_STR.split('x')))
     FPS = args.fps
+    FLT_CTRL = args.flt_ctrl
 
     # Validate INFERENCE_RESOLUTION
     # check if the inference resolution is too tall
@@ -179,17 +182,20 @@ def main():
         
         # create TransmitterSwitch object
         recording_switch = TransmitterSwitch(13, 2)
-        autopilot_switch = TransmitterSwitch(21, 2)
-            
-        # define aileron servo handler
-        input_pin = 27
-        output_pin = 17
-        aileron_servo_handler = ServoHandler(input_pin, output_pin)
-        # define elevator servo handler
-        input_pin = 5
-        output_pin = 4
-        elevator_servo_handler = ServoHandler(input_pin, output_pin)
-        sleep(1)
+        
+        if FLT_CTRL:
+            print('Initializing flight controller.')
+            autopilot_switch = TransmitterSwitch(21, 2)
+                
+            # define aileron servo handler
+            input_pin = 27
+            output_pin = 17
+            aileron_servo_handler = ServoHandler(input_pin, output_pin)
+            # define elevator servo handler
+            input_pin = 5
+            output_pin = 4
+            elevator_servo_handler = ServoHandler(input_pin, output_pin)
+            sleep(1)
     
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
@@ -224,24 +230,26 @@ def main():
             else: 
                 predicted_angle = recent_horizons[0]['angle'] + recent_horizons[0]['angle'] - recent_horizons[1]['angle'] 
                 predicted_offset = recent_horizons[0]['offset'] + recent_horizons[0]['offset'] - recent_horizons[1]['offset']
-
-        # determine servo duties
-        if autopilot and is_good_horizon:
-            aileron_value = get_aileron_value(horizon['angle'])
-            elevator_value = get_elevator_value(pitch)
-        else:
-            aileron_value = None
-            elevator_value = None
         
-        # actuate the servos
-        if gv.os == 'Linux':
-            if not autopilot:
-                aileron_servo_handler.passthrough()
-                elevator_servo_handler.passthrough(reverse=True)
-                
-            elif autopilot and aileron_value:
-                aileron_servo_handler.actuate(aileron_value)
-                elevator_servo_handler.actuate(elevator_value)
+        # Flight Controller
+        if FLT_CTRL:
+        # determine servo duties
+            if autopilot and is_good_horizon:
+                aileron_value = get_aileron_value(horizon['angle'])
+                elevator_value = get_elevator_value(pitch)
+            else:
+                aileron_value = None
+                elevator_value = None
+            
+            # actuate the servos
+            if gv.os == 'Linux':
+                if not autopilot:
+                    aileron_servo_handler.passthrough()
+                    elevator_servo_handler.passthrough(reverse=True)
+                    
+                elif autopilot and aileron_value:
+                    aileron_servo_handler.actuate(aileron_value)
+                    elevator_servo_handler.actuate(elevator_value)
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -256,7 +264,11 @@ def main():
             frame_data['pitch'] = pitch
             frame_data['is_good_horizon'] = is_good_horizon
             frame_data['actual_fps'] = actual_fps
-            frame_data['aileron_value'] = aileron_value
+            if FLT_CTRL:
+                frame_data['aileron_value'] = aileron_value
+            else:
+                frame_data['aileron_value'] = ''
+                
             frames[recording_frame_num] = frame_data
          
         if gv.render_image:
@@ -271,8 +283,9 @@ def main():
                 draw_horizon(frame_copy, angle, offset, offset_new, is_good_horizon, INFERENCE_RESOLUTION)
             # draw HUD
             draw_hud(frame_copy, horizon['angle'], pitch, is_good_horizon, gv.recording)
-            # draw aileron
-            draw_servos(frame_copy, aileron_value)
+            if FLT_CTRL:
+                # draw aileron
+                draw_servos(frame_copy, aileron_value)
             # show image
             cv2.imshow("Real-time Display", frame_copy)
 
@@ -284,10 +297,13 @@ def main():
         key = cv2.waitKey(1)
         if gv.os == 'Linux':
             recording_switch_new_position = recording_switch.detect_position_change()
-            autopilot_switch_new_position = autopilot_switch.detect_position_change()
         else:
             recording_switch_new_position = None
+        if gv.os == 'Linux' and FLT_CTRL:
+            autopilot_switch_new_position = autopilot_switch.detect_position_change()
+        else:
             autopilot_switch_new_position = None
+            
         if key == ord('q'):
             break
         elif key == ord('d'):
