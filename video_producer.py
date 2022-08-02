@@ -7,13 +7,19 @@ from timeit import default_timer as timer
 
 # my libraries
 from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
-from crop_and_scale import get_cropping_and_scaling_parameters
+from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
+from find_horizon import find_horizon, HorizonPredicter
 
-def main():
+# constants
+BLUE = (255,0,0)
+
+def main(mode=1, output_res=(1280,720)):
     # check if the folder exists, if not, create it
     recordings_path = "recordings"
     if not os.path.exists(recordings_path):
         os.makedirs(recordings_path)
+        print('No files were found in the recordings folder. Please try again.')
+        return
     
     # define the list of acceptable video file formats
     acceptable_file_extentions = ['avi','mp4']
@@ -64,6 +70,9 @@ def main():
         fps = datadict['metadata']['fps']
         resolution_str = datadict['metadata']['resolution']
         inf_resolution_str = datadict['metadata']['inference_resolution']
+        inf_resolution_str = datadict['metadata']['inference_resolution']
+        inf_resolution_str = datadict['metadata']['inference_resolution']
+        exclusion_thresh = datadict['metadata']['exclusion_thresh']
 
         resolution = tuple(map(int, resolution_str.split('x')))
         inf_resolution = tuple(map(int, inf_resolution_str.split('x')))
@@ -75,11 +84,13 @@ def main():
         # define video_writer
         output_video_path = f'{recordings_path}/{video_name}_output.{video_extension}'
         fourcc = cv2.VideoWriter_fourcc('X','V','I','D')
-        writer = cv2.VideoWriter(output_video_path, fourcc, fps, resolution)
+        writer = cv2.VideoWriter(output_video_path, fourcc, fps, output_res)
 
         # get some parameters for cropping and scaling
         # in this context, this will be used for draw_roi
         crop_and_scale_parameters = get_cropping_and_scaling_parameters(resolution, inf_resolution)
+
+        horizon_predicter = HorizonPredicter()
 
         frame_num = 0
         while True:
@@ -94,20 +105,127 @@ def main():
             offset_new = datadict['frames'][dict_key]['offset_new']
             pitch = datadict['frames'][dict_key]['pitch']
             is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
+            actual_fps = datadict['frames'][dict_key]['actual_fps']
             aileron_value = datadict['frames'][dict_key]['aileron_value']
 
-            # draw_roi
-            draw_roi(frame, crop_and_scale_parameters)
+            # for both modes
+            # # draw_roi
+            # draw_roi(frame, crop_and_scale_parameters)
 
-            # draw the horizon
-            if angle != 'null':            
-                draw_horizon(frame, angle, offset, offset_new, is_good_horizon)
+            # # draw center circle
+            # x = frame.shape[1]//2
+            # y = frame.shape[0]//2
+            # center = (x, y)
+            # radius = frame.shape[0]//72
+            # cv2.circle(frame, center, radius, BLUE, 2)
 
-            # draw HUD
-            draw_hud(frame, angle, pitch, is_good_horizon)
+            # # draw the horizon
+            # if angle != 'null':  
+            #     if is_good_horizon:
+            #         color = (255,0,0)
+            #     else:
+            #         color = (0,0,255)          
+            #     draw_horizon(frame, angle, offset, color, draw_groundline=is_good_horizon)
 
-            # draw aileron
-            draw_servos(frame, aileron_value)
+            # normal mode (without diagnostic mask)
+            if mode == 0:
+                # draw_roi
+                draw_roi(frame, crop_and_scale_parameters)
+
+                # draw center circle
+                x = frame.shape[1]//2
+                y = frame.shape[0]//2
+                center = (x, y)
+                radius = frame.shape[0]//72
+                cv2.circle(frame, center, radius, BLUE, 2)
+
+                # draw the horizon
+                if angle != 'null':  
+                    if is_good_horizon:
+                        color = (255,0,0)
+                    else:
+                        color = (0,0,255)          
+                    draw_horizon(frame, angle, offset, color, draw_groundline=is_good_horizon)
+
+                # draw HUD
+                draw_hud(frame, angle, pitch, actual_fps, is_good_horizon)
+
+                # draw aileron
+                draw_servos(frame, aileron_value)
+
+            # advanced mode (with diagnostic mask)
+            elif mode == 1:
+                scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
+                horizon, diagnostic_mask = find_horizon(scaled_and_cropped_frame, horizon_predicter.predicted_angle, 
+                                                        horizon_predicter.predicted_offset, exclusion_thresh, 
+                                                        diagnostic_mode=True)
+
+                # check the variance to determine if this is a good horizon
+                if is_good_horizon and horizon['angle']: 
+                    horizon_predicter.predict(horizon)
+                else:
+                    horizon_predicter.predict(None)
+
+                # draw_roi
+                draw_roi(frame, crop_and_scale_parameters)
+
+                # resize the main frame
+                desired_height = output_res[1]
+                scale_factor = desired_height / frame.shape[0]
+                desired_width = int(np.round(frame.shape[1] * scale_factor))
+                desired_dimensions = (desired_width, desired_height)
+                resized_frame = cv2.resize(frame, desired_dimensions)
+
+                # draw center circle
+                x = resized_frame.shape[1]//2
+                y = resized_frame.shape[0]//2
+                center = (x, y)
+                radius = resized_frame.shape[0]//72
+                cv2.circle(resized_frame, center, radius, BLUE, 2)
+
+                # draw the horizon
+                if angle != 'null':  
+                    if is_good_horizon:
+                        color = (255,0,0)
+                    else:
+                        color = (0,0,255)          
+                    draw_horizon(resized_frame, angle, offset, color, draw_groundline=is_good_horizon)
+
+                # resize the diagnostic mask
+                desired_width = output_res[0] - resized_frame.shape[1]
+                scale_factor = desired_width / diagnostic_mask.shape[1]
+                desired_height = int(np.round(diagnostic_mask.shape[0] * scale_factor))
+                desired_dimensions = (desired_width, desired_height)
+                resized_diagnostic_mask = cv2.resize(diagnostic_mask, desired_dimensions)
+
+                # stats canvas
+                width = resized_diagnostic_mask.shape[1]
+                height = (output_res[1] - resized_diagnostic_mask.shape[0]) // 2
+                stats_canvas = np.zeros((height, width, 3), dtype = "uint8")
+                stats_canvas.fill(210)
+
+                # servo visualization canvas
+                servo_canvas = stats_canvas.copy()
+
+                # draw border lines
+                border_elements = [stats_canvas, resized_diagnostic_mask, servo_canvas]
+                for element in border_elements:
+                    points = [(0,0),(element.shape[1],0),(element.shape[1],element.shape[0]),(0,element.shape[1])]
+                    for idx, pt in enumerate(points):
+                        next_idx = idx + 1
+                        if next_idx >= len(points):
+                            pt2 = points[0]
+                        else:
+                            pt2 = points[next_idx]
+                        cv2.line(element, pt, pt2, BLUE, 3)
+                
+                # draw control surfaces and other elements of the HUD
+                draw_hud(stats_canvas, angle, pitch, actual_fps, is_good_horizon)
+                # draw_servos(canvas, aileron_value)
+
+                # stack the frames
+                stacked = cv2.vconcat([stats_canvas, resized_diagnostic_mask, servo_canvas])
+                frame = cv2.hconcat([resized_frame, stacked])
 
             # send the frame to the queue to be recorded
             writer.write(frame)
@@ -138,6 +256,7 @@ def main():
         cv2.destroyAllWindows()
 
     # print final message
+    print('----------------------------------------')
     print(f"Finished producing {n + 1} videos.")
     print('----------------------------------------')
 

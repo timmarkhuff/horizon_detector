@@ -2,13 +2,21 @@
 # Author: Tim Huff
 
 import cv2
+import platform
 import numpy as np
 from numpy.linalg import norm
 from math import atan2, cos, sin, pi, sqrt
 from draw_display import draw_horizon
 import global_variables as gv
 
+# constants
 FULL_ROTATION = 2 * pi
+OPERATING_SYSTEM = platform.system()
+if OPERATING_SYSTEM == 'Linux':
+    render_image = False
+else:
+    render_image = True
+
 
 def adjust_angle(angle: float, sky_is_up: bool) -> float:
     """
@@ -36,19 +44,6 @@ def find_horizon(frame:np.ndarray,
     exclusion_thresh: parameter that controls how close horizon points have to be
     to predicted horizon in order to be considered valid
     """
-
-    # generate mask
-    bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.bilateralFilter(bgr2gray,9,100,100)
-    _, mask = cv2.threshold(blur,250,255,cv2.THRESH_OTSU)
-    # mask = cv2.adaptiveThreshold(bgr2gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11,2)
-
-    # find contours
-    if gv.os == "Linux": # for raspberry pi
-        _, contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
-    else: # for windows
-        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
     # Initialize the horizon as a dictionary of None values.
     # If no horizon can be found, this will be returned.
     horizon = {}
@@ -59,10 +54,23 @@ def find_horizon(frame:np.ndarray,
     horizon['m'] = None
     horizon['b'] = None
 
+    # generate mask
+    bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.bilateralFilter(bgr2gray,9,100,100)
+    _, mask = cv2.threshold(blur,250,255,cv2.THRESH_OTSU)
+    # mask = cv2.adaptiveThreshold(bgr2gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11,2)
+
+    # find contours
+    if OPERATING_SYSTEM == "Linux": # for raspberry pi
+        _, contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
+    else: # for windows
+        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+
     if len(contours) == 0:
         # If there are too few contours to find a horizon,
         # return a dictionary of None values
-        return horizon 
+        return horizon, mask
 
     # find the contour with the largest area
     largest_contour = sorted(contours, key=cv2.contourArea, reverse=True)[0] 
@@ -146,7 +154,7 @@ def find_horizon(frame:np.ndarray,
 
     # Draw the diagnostic information.
     # Only use for diagnostics, as this slows down inferences. 
-    if diagnostic_mode and gv.render_image:
+    if diagnostic_mode:
         # scale up the image to make it easier to see
         desired_height = 500
         scale_factor = desired_height / frame.shape[0]
@@ -177,16 +185,11 @@ def find_horizon(frame:np.ndarray,
         if predicted_angle:
             # normalize the angle
             predicted_angle = predicted_angle / (2 * pi)
-            mask = draw_horizon(mask, predicted_angle, predicted_offset, 0,  False)
-        
-        # draw the results
-        cv2.imshow("mask", mask)
-        cv2.imshow("bgr2gray", bgr2gray)
-        cv2.imshow("blur", blur)
-    
+            draw_horizon(mask, predicted_angle, predicted_offset, (0,255,0),  False)
+            
     # Return None values for horizon, since too few points were found.
     if x_filtered.shape[0] < 3:
-        return horizon 
+        return horizon, mask
 
     # polyfit
     m, b = np.polyfit(x_filtered, y_filtered, 1)
@@ -199,7 +202,7 @@ def find_horizon(frame:np.ndarray,
     else:
         sky_is_up = 0 # below
 
-    # FIND PITCH 
+    # Find offset_new, necessary for finding pitch
     # define two points along horizon
     p1 = np.array([0, b])
     p2 = np.array([frame.shape[1], m * frame.shape[1] + b])
@@ -249,7 +252,7 @@ def find_horizon(frame:np.ndarray,
     horizon['b'] = b
 
     # return the calculated values for horizon
-    return horizon 
+    return horizon, mask
 
 def get_pitch(offset: float, inf_fov_diag: float) -> float:
     """
@@ -262,6 +265,28 @@ def get_pitch(offset: float, inf_fov_diag: float) -> float:
     # shift the normalized offset to an offset range -1 to 1
     offset_pos_neg = 2 * offset - 1 
     return -1 * offset_pos_neg * inf_fov_diag / 2
+
+class HorizonPredicter:
+    def __init__(self):
+        """
+        Predicts the next horizon based on the previous recent horizons.
+        """
+        self.recent_horizons = [None, None]
+        self.predicted_angle = None
+        self.predicted_offset = None
+    def predict(self, current_horizon: dict):
+        """
+        Takes the current horizon and returns the predicted angle and offset
+        of the next horizon.
+        """
+        self.recent_horizons = [current_horizon, self.recent_horizons[0]]
+        if None in self.recent_horizons:
+            self.predicted_angle = None
+            self.predicted_offset = None
+        else:
+            self.predicted_angle = self.recent_horizons[0]['angle'] + self.recent_horizons[0]['angle'] - self.recent_horizons[1]['angle'] 
+            self.predicted_offset = self.recent_horizons[0]['offset'] + self.recent_horizons[0]['offset'] - self.recent_horizons[1]['offset']
+
 
 if __name__ == "__main__":
     # load the image
