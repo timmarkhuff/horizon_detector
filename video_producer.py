@@ -8,7 +8,7 @@ from timeit import default_timer as timer
 # my libraries
 from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
-from find_horizon import find_horizon, HorizonPredicter
+from find_horizon import HorizonDetector
 
 # constants
 BLUE = (255,0,0)
@@ -73,7 +73,8 @@ def main(mode=1, output_res=(1280,720)):
         inf_resolution_str = datadict['metadata']['inference_resolution']
         inf_resolution_str = datadict['metadata']['inference_resolution']
         exclusion_thresh = datadict['metadata']['exclusion_thresh']
-
+        acceptable_variance = datadict['metadata']['acceptable_variance']
+        fov = datadict['metadata']['fov']
         resolution = tuple(map(int, resolution_str.split('x')))
         inf_resolution = tuple(map(int, inf_resolution_str.split('x')))
 
@@ -90,7 +91,8 @@ def main(mode=1, output_res=(1280,720)):
         # in this context, this will be used for draw_roi
         crop_and_scale_parameters = get_cropping_and_scaling_parameters(resolution, inf_resolution)
 
-        horizon_predicter = HorizonPredicter()
+        # define the HorizonDetector
+        horizon_detector = HorizonDetector(exclusion_thresh, fov, acceptable_variance)
 
         frame_num = 0
         while True:
@@ -102,30 +104,10 @@ def main(mode=1, output_res=(1280,720)):
             dict_key = str(frame_num)
             angle = datadict['frames'][dict_key]['angle']
             offset = datadict['frames'][dict_key]['offset']
-            offset_new = datadict['frames'][dict_key]['offset_new']
             pitch = datadict['frames'][dict_key]['pitch']
             is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
             actual_fps = datadict['frames'][dict_key]['actual_fps']
             aileron_value = datadict['frames'][dict_key]['aileron_value']
-
-            # for both modes
-            # # draw_roi
-            # draw_roi(frame, crop_and_scale_parameters)
-
-            # # draw center circle
-            # x = frame.shape[1]//2
-            # y = frame.shape[0]//2
-            # center = (x, y)
-            # radius = frame.shape[0]//72
-            # cv2.circle(frame, center, radius, BLUE, 2)
-
-            # # draw the horizon
-            # if angle != 'null':  
-            #     if is_good_horizon:
-            #         color = (255,0,0)
-            #     else:
-            #         color = (0,0,255)          
-            #     draw_horizon(frame, angle, offset, color, draw_groundline=is_good_horizon)
 
             # normal mode (without diagnostic mask)
             if mode == 0:
@@ -156,15 +138,7 @@ def main(mode=1, output_res=(1280,720)):
             # advanced mode (with diagnostic mask)
             elif mode == 1:
                 scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
-                horizon, diagnostic_mask = find_horizon(scaled_and_cropped_frame, horizon_predicter.predicted_angle, 
-                                                        horizon_predicter.predicted_offset, exclusion_thresh, 
-                                                        diagnostic_mode=True)
-
-                # check the variance to determine if this is a good horizon
-                if is_good_horizon and horizon['angle']: 
-                    horizon_predicter.predict(horizon)
-                else:
-                    horizon_predicter.predict(None)
+                horizon, diagnostic_mask = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=True)
 
                 # draw_roi
                 draw_roi(frame, crop_and_scale_parameters)
@@ -184,12 +158,12 @@ def main(mode=1, output_res=(1280,720)):
                 cv2.circle(resized_frame, center, radius, BLUE, 2)
 
                 # draw the horizon
-                if angle != 'null':  
+                if horizon['angle'] != 'null':  
                     if is_good_horizon:
                         color = (255,0,0)
                     else:
                         color = (0,0,255)          
-                    draw_horizon(resized_frame, angle, offset, color, draw_groundline=is_good_horizon)
+                    draw_horizon(resized_frame, horizon['angle'], horizon['offset'], color, draw_groundline=is_good_horizon)
 
                 # resize the diagnostic mask
                 desired_width = output_res[0] - resized_frame.shape[1]

@@ -8,9 +8,6 @@ from timeit import default_timer as timer
 import global_variables as gv
 import platform
 
-# my libraries
-from text_to_speech import speaker
-
 class CustomVideoCapture:
     def __init__(self, resolution=None, source=0):
         self.run = False
@@ -44,7 +41,7 @@ class CustomVideoCapture:
         self.cap.set(3,self.resolution[0])
         self.cap.set(4,self.resolution[1])
 
-        speaker.add_to_queue(f'resolution: {self.resolution}')
+        print(f'resolution: {self.resolution}')
 
         # fourcc = cv2.VideoWriter_fourcc(*'XVID')
         # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -129,7 +126,7 @@ class CustomVideoWriter:
     def start_writing(self):
         def thread():
             self.run = True
-            speaker.add_to_queue(f'Recording in {self.resolution} at {self.fps} FPS.')
+            print(f'Recording in {self.resolution} at {self.fps} FPS.')
             self.time_spent_writing = 0
             self.frames_written = 0
             while gv.recording or not self.queue.empty():
@@ -145,7 +142,7 @@ class CustomVideoWriter:
                     self.time_spent_writing += elapsed_time
                     self.frames_written += 1
             self.stop()
-            speaker.add_to_queue(f"Recording stopped.")
+            print(f"Recording stopped.")
         Thread(target=thread).start()
 
     def stop(self):
