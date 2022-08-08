@@ -1,7 +1,7 @@
 CENTER = 0
 MAX_DEFLECTION = 1
 
-def get_aileron_value(angle: float) -> float:
+def get_aileron_duty(angle: float) -> float:
     # determine direction and current error
     if angle < .5:
         direction = 1
@@ -17,20 +17,20 @@ def get_aileron_value(angle: float) -> float:
         duty_diff = current_error ** 2 / .1 ** 2 * MAX_DEFLECTION * direction
 
     # determine duty
-    aileron_value = CENTER + duty_diff
+    aileron_duty = CENTER + duty_diff
 
-    return aileron_value
+    return aileron_duty
 
 if __name__ == "__main__":
     angle = .2
-    aileron_value = get_aileron_value(angle)
-    print(aileron_value)
+    aileron_duty = get_aileron_duty(angle)
+    print(aileron_duty)
     
     
 # CENTER = 7
 # MAX_DEFLECTION = 3
 # 
-# def get_aileron_value(angle: float) -> float:
+# def get_aileron_duty(angle: float) -> float:
 #     # determine direction and current error
 #     if angle < .5:
 #         direction = 1
@@ -46,11 +46,11 @@ if __name__ == "__main__":
 #         duty_diff = (current_error ** 2) / (.25 ** 2) * MAX_DEFLECTION * direction
 # 
 #     # determine duty
-#     aileron_value = CENTER + duty_diff
+#     aileron_duty = CENTER + duty_diff
 # 
-#     return aileron_value
+#     return aileron_duty
 # 
 # if __name__ == "__main__":
 #     angle = .3
-#     aileron_value = get_aileron_value(angle)
-#     print(aileron_value)
+#     aileron_duty = get_aileron_duty(angle)
+#     print(aileron_duty)

@@ -16,8 +16,7 @@ from video_classes import CustomVideoCapture, CustomVideoWriter
 import global_variables as gv
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import HorizonDetector
-from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
-from flight_controller import get_aileron_value, get_elevator_value
+from draw_display import draw_horizon, draw_hud, draw_roi
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
 
 def main():
@@ -207,27 +206,8 @@ def main():
             scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
 
             # find the horizon
-            horizon, diagnostic_mask = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=render_image)
-
-        # Flight Controller
-        if FLT_CTRL:
-        # determine servo duties
-            if autopilot and horizon['is_good_horizon']:
-                aileron_value = get_aileron_value(horizon['angle'])
-                elevator_value = get_elevator_value(horizon['pitch'])
-            else:
-                aileron_value = None
-                elevator_value = None
-            
-            # actuate the servos
-            if OPERATING_SYSTEM == 'Linux':
-                if not autopilot:
-                    aileron_servo_handler.passthrough()
-                    elevator_servo_handler.passthrough(reverse=True)
-                    
-                elif autopilot and aileron_value:
-                    aileron_servo_handler.actuate(aileron_value)
-                    elevator_servo_handler.actuate(elevator_value)
+            output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=render_image)
+            roll, pitch, variance, is_good_horizon, diagnostic_mask = output
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -236,19 +216,11 @@ def main():
 
             # save diagnostic data to frame_data dictionary
             frame_data = {}
-            frame_data['angle'] = horizon['angle']
-            frame_data['offset'] = horizon['offset']
-            frame_data['offset_new'] = horizon['offset_new']
-            frame_data['variance'] = horizon['variance']
-            frame_data['is_good_horizon'] = horizon['is_good_horizon']
-            frame_data['pitch'] = horizon['pitch']
-            frame_data['actual_fps'] = actual_fps
-
-            if FLT_CTRL:
-                frame_data['aileron_value'] = aileron_value
-            else:
-                frame_data['aileron_value'] = None
-                
+            frame_data['roll'] = roll
+            frame_data['pitch'] = pitch
+            frame_data['variance'] = variance
+            frame_data['is_good_horizon'] = is_good_horizon
+            frame_data['actual_fps'] = actual_fps                
             frames[recording_frame_num] = frame_data
          
         if render_image:
@@ -256,26 +228,22 @@ def main():
             # draw roi
             draw_roi(frame_copy, crop_and_scale_parameters)
             # draw horizon
-            if horizon['angle']:
-                angle = horizon['angle']
-                offset = horizon['offset']
-                if horizon['is_good_horizon']:
+            if roll:
+                if is_good_horizon:
                     color = (255,0,0)
                 else:
                     color = (0,0,255)
-                draw_horizon(frame_copy, angle, offset, color, draw_groundline=horizon['is_good_horizon'])
+                draw_horizon(frame_copy, roll, pitch, 
+                            FOV, color, draw_groundline=is_good_horizon)
 
             # draw HUD
-            draw_hud(frame_copy, horizon['angle'], horizon['pitch'], actual_fps, horizon['is_good_horizon'], gv.recording)
+            draw_hud(frame_copy, roll, pitch, actual_fps, is_good_horizon, gv.recording)
 
             # draw center circle
             center = (frame_copy.shape[1]//2, frame_copy.shape[0]//2)
             radius = frame.shape[0]//100
             cv2.circle(frame_copy, center, radius, (255,0,0), 2)
 
-            if FLT_CTRL:
-                # draw aileron
-                draw_servos(frame_copy, aileron_value)
             # show image
             cv2.imshow("Real-time Display", frame_copy)
             cv2.imshow("Diagnostic Mask", diagnostic_mask)
@@ -318,9 +286,6 @@ def main():
         elif (key == ord('a') or autopilot_switch_new_position == 0) and autopilot:
             autopilot = False
             print(f'Auto-pilot: {autopilot}')
-            if OPERATING_SYSTEM == 'Linux':
-                aileron_servo_handler.actuate(0) # return the servo to center position
-                elevator_servo_handler.actuate(0) # return the servo to center position
         elif (key == ord('r') or recording_switch_new_position == 1) and not gv.recording:
             # toggle the recording flag
             gv.recording = not gv.recording

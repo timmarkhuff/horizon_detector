@@ -1,8 +1,47 @@
+from re import X
+from sys import base_prefix
+from tkinter.tix import MAX
 import cv2
 import numpy as np
-from math import cos, sin, pi, degrees, sqrt
+from math import cos, sin, pi, radians
 
-FULL_ROTATION = 2 * pi
+FULL_ROTATION = 360
+
+def _find_points(m: float, b: float, frame_shape: tuple) -> list:
+    """"
+    Given the slope (m), y intercept (b) and the frame shape (frame_shape),
+    find the two points of the line that intersect with the border of the frame.
+    """
+    # special condition if slope is 0
+    if m == 0:
+        b = int(np.round(b))
+        p1 = (0, b)
+        p2 = (frame_shape[1], b)
+        return [p1, p2]
+
+    points_to_return = []
+    # left
+    if 0 < b <= frame_shape[0]:
+        px = 0
+        py = int(np.round(b))
+        points_to_return.append((px, py))
+    # top
+    if 0 < -b / m <= frame_shape[1]:
+        px = int(np.round(-b / m))
+        py = 0
+        points_to_return.append((px, py))
+    # right
+    if 0 < m * frame_shape[1] + b <= frame_shape[0]:
+        px = frame_shape[1]
+        py = int(np.round(m * frame_shape[1] + b))
+        points_to_return.append((px, py))
+    # bottom
+    if 0 < (frame_shape[0] - b) / m <= frame_shape[1]:
+        px = int(np.round((frame_shape[0] - b) / m))
+        py = frame_shape[0]
+        points_to_return.append((px, py))
+
+    return points_to_return
 
 def draw_roi(frame: np.ndarray, crop_and_scale_parameters: dict) -> np.ndarray:
     """
@@ -28,21 +67,20 @@ def draw_roi(frame: np.ndarray, crop_and_scale_parameters: dict) -> np.ndarray:
     cv2.line(frame, p3, p4, off_white, 1)
 
 
-def draw_hud(frame: np.ndarray, angle:float , pitch: float, fps: float,
+def draw_hud(frame: np.ndarray, roll: float , pitch: float, fps: float,
                 is_good_horizon: bool, recording: bool = False) -> np.ndarray:
-    # draw angle and pitch text
-    if angle and is_good_horizon:
-        angle_degrees = degrees(angle * 2 * pi)
-        angle_degrees = int(np.round(angle_degrees))
+    # draw roll and pitch text
+    if roll and is_good_horizon:
+        roll = int(np.round(roll))
         pitch = int(np.round(pitch))
         color = (255, 0, 0)
     else:
-        angle_degrees = ''
+        roll = ''
         pitch = ''
         color = (0,0,255)
     # round fps
     fps = np.round(fps, decimals=2)
-    cv2.putText(frame, f"Roll: {angle_degrees}",(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,color,1,cv2.LINE_AA)
+    cv2.putText(frame, f"Roll: {roll}",(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,color,1,cv2.LINE_AA)
     cv2.putText(frame, f"Pitch: {pitch}",(20,80),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,color,1,cv2.LINE_AA)
     cv2.putText(frame, f"FPS: {fps}",(20,120),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,(255,0,0),1,cv2.LINE_AA)
 
@@ -54,118 +92,117 @@ def draw_hud(frame: np.ndarray, angle:float , pitch: float, fps: float,
 
     return frame
 
-def draw_horizon(frame: np.ndarray, angle:float , offset_normalized: float, 
-                    color: tuple, draw_groundline: bool):
+def draw_horizon(frame: np.ndarray, roll: float , pitch: float, 
+                    fov: float, color: tuple, draw_groundline: bool):
 
-    # if no horizon data is provided, terminate function early and
-    # return provided frame
-    if angle is None:
-        return frame
+    # if no horizon data is provided, terminate function early and return
+    if roll is None:
+        return
 
-    # take normalized angle and express it in terms of radians
-    angle = angle * 2 * pi
+    # take normalized roll and express it in terms of radians
+    roll = radians(roll)
     
-    # determine if the sky is up or down based on the angle
-    sky_is_up = (angle >= FULL_ROTATION * .75  or (angle > 0 and angle <= FULL_ROTATION * .25))
+    # determine if the sky is up or down based on the roll
+    sky_is_up = (roll >= FULL_ROTATION * .75  or (roll > 0 and roll <= FULL_ROTATION * .25))
+    
+    # find the distance 
+    distance = pitch / fov * frame.shape[0]
+
+    # define the line perpendicular to horizon
+    angle_perp = roll + pi / 2
+    x_perp = distance * cos(angle_perp) + frame.shape[1]/2
+    y_perp = distance * sin(angle_perp) + frame.shape[0]/2
 
     # define the horizon line
-    offset = int(np.round(offset_normalized * frame.shape[0]))
-    x = cos(angle)
-    y = sin(angle) 
-    m = y / x
-    b = offset - m * .5 * frame.shape[1]
-    p1_x = 0
-    p1_y = int(np.round(b)) # round so that we get an integer
-    p1_horizon = (p1_x, p1_y)
-    p2_x = frame.shape[1]
-    p2_y = int(np.round(m * frame.shape[1] + b))
-    p2_horizon = (p2_x, p2_y)
-
-
-    # define the ground line
-    if draw_groundline:
-        m_groundline = -1/m
-        b_groundline = frame.shape[0]//2 - m_groundline * frame.shape[1]//2
-        # find the points to be drawn
-        p1_x = int(np.round((b_groundline - b) / (m - m_groundline)))
-        p1_y = int(np.round(m * p1_x + b))
-        p1 = (p1_x, p1_y)
-        if sky_is_up:
-            p2_y = frame.shape[0]
-            p2_x = int(np.round((p2_y - b_groundline) / m_groundline))
+    run = cos(roll)
+    rise = sin(roll)
+    if run != 0:
+        m = rise / run
+        b = y_perp - m * x_perp
+        points = _find_points(m, b, frame.shape)
+        if not points:
+            return
         else:
-            p2_y = 0
-            p2_x = int(np.round(-1 * b_groundline / m_groundline))
-        p2 = (p2_x, p2_y)
-        # draw the ground line
+            p1, p2 = points
+       
+    else:
+        p1 = (int(np.round(x_perp)), 0)
+        p2 = (int(np.round(x_perp)), frame.shape[0])
+
+    cv2.line(frame, p1, p2, color, 2)
+
+    if draw_groundline and m != 0:
+        m_perp = -1/m
+        b_perp = y_perp - m_perp * x_perp
+        points = _find_points(-1/m, b_perp, frame.shape)
+        above_line = m * points[0][0] + b < points[0][1]
+        if (sky_is_up and above_line) or (not sky_is_up and not above_line):
+            p2 = points[0]
+        else:
+            p2 = points[1]
+        p1x = int(np.round(x_perp))
+        p1y = int(np.round(y_perp))
+        p1 = (p1x, p1y)
         cv2.line(frame, p1, p2, (0,191,255), 1)
 
-    # draw the horizon
-    cv2.line(frame, p1_horizon, p2_horizon, color, 2)
+def draw_surfaces(frame, left: float, right: float, top: float, bottom: float, 
+                    ail_val: float, elev_val: float, surface_color: tuple):
+    # constants
+    plane_color = (50, 50, 50)
+    plane_thickness = 3
 
-def draw_servos(frame: np.ndarray, aileron_value) -> np.ndarray:
-    # define lengths and widths for drawing
-    hor_offset = int(frame.shape[1] * .03)
-    ver_offset = int(frame.shape[0] * .95)
-    wingspan = int(frame.shape[1] * .3)
-    vert_stab_height = int(frame.shape[1] * .05)
-    hor_stab_width = int(frame.shape[0] * .15)
-    hor_stab_height = int(frame.shape[1] * .02)
-    aileron_width = int(frame.shape[1] * .06)
-    aileron_offset = int(frame.shape[1] * .02)
-    full_deflection = int(frame.shape[1] * .02)
-
-    if not aileron_value:
-        aileron_value = 0
-
-    # define values related to servos
-    center_value = 0
-    max_deflection = 1
-    value_diff = aileron_value - center_value
-    value_diff_norm = value_diff / max_deflection
+    # convert to pixel values, relative to frame size
+    left = int(np.round(frame.shape[1] * left))
+    right = int(np.round(frame.shape[1] * right))
+    top = int(np.round(frame.shape[0] * top))
+    bottom = int(np.round(frame.shape[0] * bottom))
+    plane_width = right - left
+    plane_height = bottom - top
+    hor_stab_height = int(np.round(.6 * plane_height))
+    hor_stab_width = int(np.round(.4 * plane_width))
+    full_defection = int(np.round(.2 * plane_height))
+    ail_width = plane_width//3
+    ail_offset = plane_width//20
+    ail_deflection = int(np.round(ail_val * full_defection))
+    elev_offset = ail_offset
+    elev_deflection = int(np.round(elev_val * full_defection))
 
     # draw wing
-    pt1 = (hor_offset, ver_offset)
-    pt2 = (hor_offset + wingspan, ver_offset)
-    cv2.line(frame, pt1, pt2, (0,0,200), 2)
+    pt1 = (left, bottom)
+    pt2 = (right, bottom)
+    cv2.line(frame, pt1, pt2, plane_color, plane_thickness)
 
     # draw vertical stabilizer
-    x = int(hor_offset + wingspan/2)
-    y = ver_offset
-    pt1 = (x, y)
-    x = int(hor_offset + wingspan/2)
-    y = ver_offset - vert_stab_height
-    pt2 = (x, y)
-    cv2.line(frame, pt1, pt2, (0,0,200), 2)
+    pt1 = (left + plane_width//2, top)
+    pt2 = (left + plane_width//2, bottom)
+    cv2.line(frame, pt1, pt2, plane_color, plane_thickness)
 
     # draw horizontal stabilizer
-    x = int(hor_offset + wingspan/2 - hor_stab_width/2)
-    y = ver_offset - hor_stab_height
-    pt1 = (x, y)
-    x = int(hor_offset + wingspan/2 + hor_stab_width/2)
-    y = ver_offset - hor_stab_height
-    pt2 = (x, y)
-    cv2.line(frame, pt1, pt2, (0,0,200), 2)
-    
-    # draw left aileron
-    x = int(hor_offset + aileron_offset)
-    y = int(ver_offset + full_deflection * value_diff_norm)
-    pt1 = (x, y)
-    x = int(hor_offset + aileron_offset + aileron_width)
-    y = ver_offset
-    pt2 = (x, y)
-    cv2.rectangle(frame, pt1, pt2, (0,200,200), -1)
-    cv2.rectangle(frame, pt1, pt2, (0,200,200), 2)
+    pt1x = left + plane_width//2 - hor_stab_width//2
+    pt1y = top + plane_height - hor_stab_height
+    pt1 = (pt1x , pt1y)
+    pt2x = right - plane_width//2 + hor_stab_width//2
+    pt2y = pt1y
+    pt2 = (pt2x, pt2y)
+    cv2.line(frame, pt1, pt2, plane_color, plane_thickness)
 
-    # draw right aileron
-    x = int(hor_offset + wingspan - aileron_offset)
-    y = int(ver_offset - full_deflection * value_diff_norm)
-    pt1 = (x, y)
-    x = int(hor_offset + wingspan - aileron_offset - aileron_width)
-    y = ver_offset
-    pt2 = (x, y)
-    cv2.rectangle(frame, pt1, pt2, (0,200,200), -1)
-    cv2.rectangle(frame, pt1, pt2, (0,200,200), 2)
+    # draw elevator
+    pt1x = left + plane_width//2 - hor_stab_width//2 + elev_offset
+    pt1y = top + plane_height - hor_stab_height + elev_deflection
+    pt1 = (pt1x , pt1y)
+    pt2x = right - plane_width//2 + hor_stab_width//2 - elev_offset
+    pt2y = top + plane_height - hor_stab_height
+    pt2 = (pt2x, pt2y)
+    cv2.rectangle(frame, pt1, pt2, surface_color, -1)
 
-    return frame
+    # draw ailerons
+    # left
+    pt1 = (left + ail_offset, bottom)
+    pt2 = (left + ail_offset + ail_width, bottom + ail_deflection)
+    cv2.rectangle(frame, pt1, pt2, surface_color, -1)
+
+    # right
+    pt1 = (right - ail_offset, bottom)
+    pt2 = (right - ail_offset - ail_width, bottom + -1 * ail_deflection)
+    cv2.rectangle(frame, pt1, pt2, surface_color, -1)
     

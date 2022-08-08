@@ -6,42 +6,28 @@ import skimage.measure
 import platform
 import numpy as np
 from numpy.linalg import norm
-from math import atan2, cos, sin, pi, sqrt
+from math import atan2, cos, sin, pi, degrees, radians
 from draw_display import draw_horizon
-import global_variables as gv
 
 # constants
-FULL_ROTATION = 2 * pi
+FULL_ROTATION = 360
 OPERATING_SYSTEM = platform.system()
 POOLING_KERNEL_SIZE = 5
 
 class HorizonDetector:
-    def __init__(self, exclusion_thresh, fov, acceptable_variance):
+    def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float):
         """
         exclusion_thresh: parameter that controls how close horizon points have to be
         to predicted horizon in order to be considered valid
-        predicted_angle: the predicted angle of the horizon based on previous frames
-        predicted_offset: predicted offset of the horizon based on previous frames
+        fov: field of view of the camera
+        acceptable_variance: minimum acceptable variance for horizon contour points.
         """
         self.exclusion_thresh = exclusion_thresh
         self.fov = fov
         self.acceptable_variance = acceptable_variance
-        self.predicted_angle = None
-        self.predicted_offset = None
+        self.predicted_roll = None
+        self.predicted_pitch = None
         self.recent_horizons = [None, None]
-
-        # if no horizon can be found, return a dictionary of none values
-        self.blank_horizon = {
-            'angle': None,
-            'offset': None,
-            'offset_new': None,
-            'variance': None,
-            'is_good_horizon': None,
-            'm': None,
-            'b': None,
-            'pitch': None
-        }
-
 
     def find_horizon(self, frame:np.ndarray, diagnostic_mode:bool=False) -> dict:
         """
@@ -49,6 +35,8 @@ class HorizonDetector:
         diagnostic_mode: if True, draws a diagnostic visualization. Should only be used for
         testing, as it slows down performance.
         """
+        # default value to return if no horizon can be found
+        roll, pitch, variance, is_good_horizon, mask = None, None, None, None, None
 
         # generate mask
         bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -68,8 +56,8 @@ class HorizonDetector:
         if len(contours) == 0:
             # If there are too few contours to find a horizon,
             # return a dictionary of None values.
-            self._predict_next_horizon(self.blank_horizon)
-            return self.blank_horizon, mask
+            self._predict_next_horizon()
+            return roll, pitch, variance, is_good_horizon, mask
 
         # find the contour with the largest area
         largest_contour = sorted(contours, key=cv2.contourArea, reverse=True)[0] 
@@ -99,17 +87,24 @@ class HorizonDetector:
             y_abbr = y_abbr[::step_size]  
 
         # define some values for checking distance to previous horizon
-        if self.predicted_angle is not None:
-            # convert predicted angle to radians
-            self.predicted_angle = self.predicted_angle * 2 * pi
+        if self.predicted_roll is not None:
+            # convert predicted_roll to radians
+            predicted_roll_radians = radians(self.predicted_roll)
 
-            # convert from angle and offset of predicted horizon to m and b
-            # convert from normalized offset to absolute offset
-            predicted_offset_absolute = int(np.round(self.predicted_offset * frame.shape[0]))
-            run = cos(self.predicted_angle)
-            rise = sin(self.predicted_angle) 
-            predicted_m = rise / run
-            predicted_b = predicted_offset_absolute - predicted_m * .5 * frame.shape[1]
+            # find the distance 
+            distance = self.predicted_pitch / self.fov * frame.shape[0]
+
+            # define the line perpendicular to horizon
+            angle_perp = predicted_roll_radians + pi / 2
+            x_perp = distance * cos(angle_perp) + frame.shape[1]/2
+            y_perp = distance * sin(angle_perp) + frame.shape[0]/2
+
+            # convert from roll and pitch of predicted horizon to m and b
+            run = cos(predicted_roll_radians)
+            rise = sin(predicted_roll_radians) 
+            if run != 0:
+                predicted_m = rise / run
+                predicted_b = y_perp - predicted_m * x_perp            
 
             # define two points on the line from the previous horizon
             p1 = np.array([0, predicted_b])
@@ -129,7 +124,7 @@ class HorizonDetector:
 
             # If there is no predicted horizon, perform no further
             # filtering on this point and accept it as valid.
-            if self.predicted_angle is None:
+            if self.predicted_roll is None:
                 x_filtered.append(x_point)
                 y_filtered.append(y_point)
                 continue 
@@ -155,8 +150,6 @@ class HorizonDetector:
             desired_width = int(np.round(frame.shape[1] * scale_factor))
             desired_dimensions = (desired_width, desired_height)
             mask = cv2.resize(mask, desired_dimensions)
-            bgr2gray = cv2.resize(bgr2gray, desired_dimensions)
-            blur = cv2.resize(blur, desired_dimensions)
             # convert the diagnostic image to color
             mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
 
@@ -171,24 +164,23 @@ class HorizonDetector:
                 circle_y = int(np.round(y_filtered[n] * scale_factor))
                 cv2.circle(mask, (circle_x, circle_y), 5, (0,255,0), -1)
             # draw the predicted horizon, if there is one
-            if self.predicted_angle:
-                # normalize the angle
-                self.predicted_angle = self.predicted_angle / (2 * pi)
-                draw_horizon(mask, self.predicted_angle, self.predicted_offset, (0,150,255),  False)
+            if self.predicted_roll:
+                draw_horizon(mask, self.predicted_roll, self.predicted_pitch, self.fov, (0,150,255),  False)
 
             # for testing
             edges = cv2.resize(edges, desired_dimensions)
-            cv2.imshow('canny', edges)
+            _, edges_binary = cv2.threshold(edges,10,255,cv2.THRESH_BINARY)
+            cv2.imshow('canny', edges_binary)
                 
         # Return None values for horizon, since too few points were found.
         if x_filtered.shape[0] < 10:
-            self._predict_next_horizon(self.blank_horizon)
-            return self.blank_horizon, mask
+            self._predict_next_horizon()
+            return roll, pitch, variance, is_good_horizon, mask
 
         # polyfit
         m, b = np.polyfit(x_filtered, y_filtered, 1)
-        angle = atan2(m,1)
-        offset = (m * frame.shape[1]/2 + b) / frame.shape[0]
+        roll = atan2(m,1)
+        roll = degrees(roll)
 
         # determine the direction of the sky (above or below)
         if m * avg_x + b > avg_y:
@@ -196,29 +188,29 @@ class HorizonDetector:
         else:
             sky_is_up = 0 # below
 
-        # Find offset_new, necessary for finding pitch
-        # define two points along horizon
+        # Get pitch
+        # Take the distance from center point of the image to the horizon and find the pitch in degrees
+        # based on field of view of the camera and the height of the image.
+        # Define two points along horizon.
         p1 = np.array([0, b])
         p2 = np.array([frame.shape[1], m * frame.shape[1] + b])
-        # center of the image
-        p3 = np.array([frame.shape[1]//2, frame.shape[0]//2]) 
-        frame_diagonal = sqrt(frame.shape[0]**2 + frame.shape[1]**2)
-        # find out if plane is pointing above or below horizon
+        # Center of the image
+        p3 = np.array([frame.shape[1]//2, frame.shape[0]//2])
+        # Find distance to horizon
+        distance_to_horizon = norm(np.cross(p2-p1, p1-p3))/norm(p2-p1)
+        # Find out if plane is pointing above or below horizon
         if p3[1] < m * frame.shape[1]//2 + b and sky_is_up:
             plane_pointing_up = 1
         elif p3[1] > m *frame.shape[1]//2 + b and sky_is_up == False:
             plane_pointing_up = 1
         else:
             plane_pointing_up = 0
-
-        distance_to_horizon = norm(np.cross(p2-p1, p1-p3))/norm(p2-p1) / frame_diagonal
-        if plane_pointing_up:
-            offset_new = .5 - distance_to_horizon
-        else:
-            offset_new = .5 + distance_to_horizon
+        pitch = distance_to_horizon / frame.shape[0] * self.fov
+        if not plane_pointing_up:
+            pitch *= -1
 
         # FIND VARIANCE 
-        # (this will be treated as a confidence score)
+        # This will be treated as a confidence score.
         p1 = np.array([0, b])
         p2 = np.array([frame.shape[1], m * frame.shape[1] + b])
         p2_minus_p1 = p2 - p1
@@ -230,14 +222,8 @@ class HorizonDetector:
             distance_list.append(distance)
         variance = np.average(distance_list) / frame.shape[0] * 100
         
-        # adjust the angle within the range of 0-2*pi
-        angle = self._adjust_angle(angle, sky_is_up) 
-
-        # normalize the angle
-        angle = angle / (2 * pi)
-
-        # get pitch
-        pitch = self._get_pitch(offset_new)
+        # adjust the roll within the range of 0 - 360 degrees
+        roll = self._adjust_roll(roll, sky_is_up) 
 
         # determine if the horizon is acceptable
         if variance < self.acceptable_variance: 
@@ -245,73 +231,58 @@ class HorizonDetector:
         else:
             is_good_horizon = 0
 
-        # put horizon values into a dictionary
-        horizon = {
-            'angle': angle,
-            'offset': offset,
-            'offset_new': offset_new,
-            'variance': variance,
-            'is_good_horizon': is_good_horizon,
-            'm': m,
-            'b': b,
-            'pitch': pitch
-        }
-
         # predict the approximate position of the next horizon
-        self._predict_next_horizon(horizon)
+        self._predict_next_horizon(roll, pitch, is_good_horizon)
 
         # return the calculated values for horizon
-        return horizon, mask
+        return roll, pitch, variance, is_good_horizon, mask
     
-    def _adjust_angle(self, angle: float, sky_is_up: bool) -> float:
+    def _adjust_roll(self, roll: float, sky_is_up: bool) -> float:
         """
-        Adjusts the angle to be within the range of 0-2*pi.
+        Adjusts the roll to be within the range of 0-2*pi.
         Removes negative values and values greater than 2*pi.
         """
-        angle = abs(angle % FULL_ROTATION)
-        in_sky_is_up_sector = (angle >= FULL_ROTATION * .75  or (angle > 0 and angle <= FULL_ROTATION * .25))
+        roll = abs(roll % FULL_ROTATION)
+        in_sky_is_up_sector = (roll >= FULL_ROTATION * .75  or (roll > 0 and roll <= FULL_ROTATION * .25))
         
         if sky_is_up == in_sky_is_up_sector:
-            return angle
-        if angle < pi:
-            angle += pi
+            return roll
+        if roll < FULL_ROTATION / 2:
+            roll += FULL_ROTATION / 2
         else:
-            angle -= pi
-        return angle
+            roll -= FULL_ROTATION / 2
+        return roll
 
-    def _predict_next_horizon(self, current_horizon):
+    def _predict_next_horizon(self, current_roll=None, current_pitch=None, is_good_horizon=None):
         """
         Based on the positions of recent horizons, predict the approximate
         position of the next horizon.
         Used to filter out noise in the next iteration.
         """
         # if the current horizon is not good, mark it as None
-        if not current_horizon['is_good_horizon']:
+        if not is_good_horizon:
             current_horizon = None
+        else:
+            current_horizon = (current_roll, current_pitch)
 
         # update the list of recent horizons
-        self.recent_horizons = [current_horizon, self.recent_horizons[0]]
+        self.recent_horizons.append(current_horizon)
+        del self.recent_horizons[0]
         
         # calculate the positions of the next horizon
         if None in self.recent_horizons:
-            self.predicted_angle = None
-            self.predicted_offset = None
+            self.predicted_roll = None
+            self.predicted_pitch = None
         else:
-            self.predicted_angle = self.recent_horizons[0]['angle'] + self.recent_horizons[0]['angle'] - self.recent_horizons[1]['angle'] 
-            self.predicted_offset = self.recent_horizons[0]['offset'] + self.recent_horizons[0]['offset'] - self.recent_horizons[1]['offset']
+            roll1 = self.recent_horizons[0][0]
+            roll2 = self.recent_horizons[1][0]
+            roll_delta = roll2 - roll1
+            self.predicted_roll =  roll2 + roll_delta
 
-    def _get_pitch(self, offset_new: float) -> float:
-        """
-        Takes the normalized offset and returns the pitch in degrees
-        based on field of view of the camera.
-        """
-        if offset_new is None:
-            return None
-
-        # shift the normalized offset to an offset range -1 to 1
-        offset_pos_neg = 2 * offset_new - 1
-        pitch = -1 * offset_pos_neg * self.fov / 2
-        return pitch
+            pitch1 = self.recent_horizons[0][1]
+            pitch2 = self.recent_horizons[1][1]
+            pitch_delta = pitch2 - pitch1
+            self.predicted_pitch = pitch2 + pitch_delta
 
 if __name__ == "__main__":
     import numpy as np
@@ -341,7 +312,7 @@ if __name__ == "__main__":
     for n in range(ITERATIONS):
         # scale the images down
         frame_small = crop_and_scale(frame, **CROP_AND_SCALE_PARAM)
-        horizon, mask = horizon_detector.find_horizon(frame_small, diagnostic_mode=False)
+        output = horizon_detector.find_horizon(frame_small, diagnostic_mode=False)
 
     t2 = timer()
     elapsed_time = t2 - t1
@@ -349,13 +320,17 @@ if __name__ == "__main__":
     print(f'Finished at {fps} FPS.')
 
     # draw the horizon
-    horizon, mask = horizon_detector.find_horizon(frame_small, diagnostic_mode=True)
-    angle = horizon['angle'] 
-    offset = horizon['offset'] 
-    pitch = horizon['pitch'] 
+    output = horizon_detector.find_horizon(frame_small, diagnostic_mode=True)
+    roll, pitch, variance, is_good_horizon, mask = output
     color = (255,0,0)
-    draw_horizon(frame, angle, offset, color, True)
+    draw_horizon(frame, roll, pitch, FOV, color, True)
+    print(f'Calculated roll: {roll}')
     print(f'Calculated pitch: {pitch}')
+
+    # draw center circle
+    center = (frame.shape[1]//2, frame.shape[0]//2)
+    radius = frame.shape[0]//100
+    cv2.circle(frame, center, radius, (255,0,0), 2)
 
     # show results
     cv2.imshow("frame", frame)

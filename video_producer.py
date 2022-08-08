@@ -6,7 +6,7 @@ import json
 from timeit import default_timer as timer
 
 # my libraries
-from draw_display import draw_horizon, draw_servos, draw_hud, draw_roi
+from draw_display import draw_horizon, draw_surfaces, draw_hud, draw_roi
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import HorizonDetector
 
@@ -102,12 +102,10 @@ def main(mode=1, output_res=(1280,720)):
 
             # extract the values
             dict_key = str(frame_num)
-            angle = datadict['frames'][dict_key]['angle']
-            offset = datadict['frames'][dict_key]['offset']
+            roll = datadict['frames'][dict_key]['roll']
             pitch = datadict['frames'][dict_key]['pitch']
             is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
             actual_fps = datadict['frames'][dict_key]['actual_fps']
-            aileron_value = datadict['frames'][dict_key]['aileron_value']
 
             # normal mode (without diagnostic mask)
             if mode == 0:
@@ -122,23 +120,21 @@ def main(mode=1, output_res=(1280,720)):
                 cv2.circle(frame, center, radius, BLUE, 2)
 
                 # draw the horizon
-                if angle != 'null':  
+                if roll != 'null':  
                     if is_good_horizon:
                         color = (255,0,0)
                     else:
                         color = (0,0,255)          
-                    draw_horizon(frame, angle, offset, color, draw_groundline=is_good_horizon)
+                    draw_horizon(frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
 
                 # draw HUD
-                draw_hud(frame, angle, pitch, actual_fps, is_good_horizon)
-
-                # draw aileron
-                draw_servos(frame, aileron_value)
+                draw_hud(frame, roll, pitch, actual_fps, is_good_horizon)
 
             # advanced mode (with diagnostic mask)
             elif mode == 1:
                 scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
-                horizon, diagnostic_mask = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=True)
+                output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=True)
+                roll, pitch, variance, is_good_horizon, diagnostic_mask = output
 
                 # draw_roi
                 draw_roi(frame, crop_and_scale_parameters)
@@ -158,12 +154,12 @@ def main(mode=1, output_res=(1280,720)):
                 cv2.circle(resized_frame, center, radius, BLUE, 2)
 
                 # draw the horizon
-                if horizon['angle'] != 'null':  
+                if roll != 'null':  
                     if is_good_horizon:
                         color = (255,0,0)
                     else:
                         color = (0,0,255)          
-                    draw_horizon(resized_frame, horizon['angle'], horizon['offset'], color, draw_groundline=is_good_horizon)
+                    draw_horizon(resized_frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
 
                 # resize the diagnostic mask
                 desired_width = output_res[0] - resized_frame.shape[1]
@@ -179,10 +175,10 @@ def main(mode=1, output_res=(1280,720)):
                 stats_canvas.fill(210)
 
                 # servo visualization canvas
-                servo_canvas = stats_canvas.copy()
+                surface_canvas = stats_canvas.copy()
 
                 # draw border lines
-                border_elements = [stats_canvas, resized_diagnostic_mask, servo_canvas]
+                border_elements = [stats_canvas, resized_diagnostic_mask, surface_canvas]
                 for element in border_elements:
                     points = [(0,0),(element.shape[1],0),(element.shape[1],element.shape[0]),(0,element.shape[1])]
                     for idx, pt in enumerate(points):
@@ -194,11 +190,11 @@ def main(mode=1, output_res=(1280,720)):
                         cv2.line(element, pt, pt2, BLUE, 3)
                 
                 # draw control surfaces and other elements of the HUD
-                draw_hud(stats_canvas, angle, pitch, actual_fps, is_good_horizon)
-                # draw_servos(canvas, aileron_value)
+                draw_hud(stats_canvas, roll, pitch, actual_fps, is_good_horizon)
+                draw_surfaces(surface_canvas, .1, .9, .35, .65, 0, 0, (0,0,255))
 
                 # stack the frames
-                stacked = cv2.vconcat([stats_canvas, resized_diagnostic_mask, servo_canvas])
+                stacked = cv2.vconcat([stats_canvas, resized_diagnostic_mask, surface_canvas])
                 frame = cv2.hconcat([resized_frame, stacked])
 
             # send the frame to the queue to be recorded

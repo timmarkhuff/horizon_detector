@@ -43,10 +43,6 @@ class CustomVideoCapture:
 
         print(f'resolution: {self.resolution}')
 
-        # fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        # fourcc = cv2.VideoWriter_fourcc(*'h264')
-        # fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
 
