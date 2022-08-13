@@ -106,6 +106,9 @@ def main(mode=1, output_res=(1280,720)):
             pitch = datadict['frames'][dict_key]['pitch']
             is_good_horizon = datadict['frames'][dict_key]['is_good_horizon']
             actual_fps = datadict['frames'][dict_key]['actual_fps']
+            ail_val = datadict['frames'][dict_key]['ail_val']
+            elev_val = datadict['frames'][dict_key]['elev_val']
+            flt_mode = datadict['frames'][dict_key]['flt_mode']
 
             # normal mode (without diagnostic mask)
             if mode == 0:
@@ -190,8 +193,12 @@ def main(mode=1, output_res=(1280,720)):
                         cv2.line(element, pt, pt2, BLUE, 3)
                 
                 # draw control surfaces and other elements of the HUD
+                if flt_mode != 0:
+                    surface_color = (0,255,0)
+                else:
+                    surface_color = (0,0,255)
+                draw_surfaces(surface_canvas, .1, .9, .35, .65, ail_val, elev_val, surface_color)
                 draw_hud(stats_canvas, roll, pitch, actual_fps, is_good_horizon)
-                draw_surfaces(surface_canvas, .1, .9, .35, .65, 0, 0, (0,0,255))
 
                 # stack the frames
                 stacked = cv2.vconcat([stats_canvas, resized_diagnostic_mask, surface_canvas])

@@ -1,11 +1,9 @@
-from re import X
-from sys import base_prefix
-from tkinter.tix import MAX
 import cv2
 import numpy as np
 from math import cos, sin, pi, radians
 
 FULL_ROTATION = 360
+FULL_ROTATION_RADIANS = 2 * pi
 
 def _find_points(m: float, b: float, frame_shape: tuple) -> list:
     """"
@@ -99,11 +97,11 @@ def draw_horizon(frame: np.ndarray, roll: float , pitch: float,
     if roll is None:
         return
 
-    # take normalized roll and express it in terms of radians
+    # take roll in degrees and express it in terms of radians
     roll = radians(roll)
     
     # determine if the sky is up or down based on the roll
-    sky_is_up = (roll >= FULL_ROTATION * .75  or (roll > 0 and roll <= FULL_ROTATION * .25))
+    sky_is_up = (roll >= FULL_ROTATION_RADIANS * .75  or (roll > 0 and roll <= FULL_ROTATION_RADIANS * .25))
     
     # find the distance 
     distance = pitch / fov * frame.shape[0]
@@ -188,7 +186,7 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
 
     # draw elevator
     pt1x = left + plane_width//2 - hor_stab_width//2 + elev_offset
-    pt1y = top + plane_height - hor_stab_height + elev_deflection
+    pt1y = top + plane_height - hor_stab_height - elev_deflection
     pt1 = (pt1x , pt1y)
     pt2x = right - plane_width//2 + hor_stab_width//2 - elev_offset
     pt2y = top + plane_height - hor_stab_height
@@ -198,11 +196,11 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
     # draw ailerons
     # left
     pt1 = (left + ail_offset, bottom)
-    pt2 = (left + ail_offset + ail_width, bottom + ail_deflection)
+    pt2 = (left + ail_offset + ail_width, bottom - ail_deflection)
     cv2.rectangle(frame, pt1, pt2, surface_color, -1)
 
     # right
     pt1 = (right - ail_offset, bottom)
-    pt2 = (right - ail_offset - ail_width, bottom + -1 * ail_deflection)
+    pt2 = (right - ail_offset - ail_width, bottom + ail_deflection)
     cv2.rectangle(frame, pt1, pt2, surface_color, -1)
     

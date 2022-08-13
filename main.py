@@ -18,6 +18,7 @@ from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import HorizonDetector
 from draw_display import draw_horizon, draw_hud, draw_roi
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
+from flight_controller import FlightController
 
 def main():
     print('----------STARTING HORIZON DETECTOR----------')
@@ -32,9 +33,7 @@ def main():
                     'Cannot be wider than resolution of input image.'
     parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
     help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
-    parser.add_argument('--fps', help=help_text, default='30', type=int)
-    help_text = 'Turn the flight controller on and off.'
-    parser.add_argument('--flt_ctrl', help=help_text, default='0', type=int)  
+    parser.add_argument('--fps', help=help_text, default=30, type=int) 
     args = parser.parse_args()
 
     # General Constants
@@ -45,8 +44,6 @@ def main():
     INFERENCE_RESOLUTION_STR = args.inf_res
     INFERENCE_RESOLUTION = tuple(map(int, INFERENCE_RESOLUTION_STR.split('x')))
     FPS = args.fps
-    # toggle the flight controller on and off
-    FLT_CTRL = args.flt_ctrl
     # percentage of the image height that is considered an acceptable variance,
     # for the find_horizon function
     ACCEPTABLE_VARIANCE = 1.3 
@@ -171,28 +168,22 @@ def main():
     
     # perform some start-up operations specific to the Raspberry Pi
     if OPERATING_SYSTEM == "Linux":
-        from switches_and_servos import TransmitterSwitch, ServoHandler
+        from switches_and_servos import ServoHandler, TransmitterSwitch
         
         # disable wifi and bluetooth on Raspberry Pi
         wifi_response, bluetooth_response = disable_wifi_and_bluetooth()
         print(f'{wifi_response} {bluetooth_response}')
         
-        # create TransmitterSwitch object
-        recording_switch = TransmitterSwitch(13, 2)
+        # create TransmitterSwitch objects
+        recording_switch = TransmitterSwitch(26, 2)
+        autopilot_switch = TransmitterSwitch(6, 2)
+            
+        # servo handlers
+        ail_handler = ServoHandler(13, 12, FPS, .1, 30)
+        elev_handler = ServoHandler(18, 27, FPS, .1, 30)
         
-        if FLT_CTRL:
-            print('Initializing flight controller.')
-            autopilot_switch = TransmitterSwitch(21, 2)
-                
-            # define aileron servo handler
-            input_pin = 27
-            output_pin = 17
-            aileron_servo_handler = ServoHandler(input_pin, output_pin)
-            # define elevator servo handler
-            input_pin = 5
-            output_pin = 4
-            elevator_servo_handler = ServoHandler(input_pin, output_pin)
-            sleep(1)
+        # flight controller
+        flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
     
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
@@ -208,6 +199,9 @@ def main():
             # find the horizon
             output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=render_image)
             roll, pitch, variance, is_good_horizon, diagnostic_mask = output
+            
+        # run the flight controller
+        ail_val, elev_val = flt_ctrl.run(roll, pitch, is_good_horizon) 
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -220,7 +214,10 @@ def main():
             frame_data['pitch'] = pitch
             frame_data['variance'] = variance
             frame_data['is_good_horizon'] = is_good_horizon
-            frame_data['actual_fps'] = actual_fps                
+            frame_data['actual_fps'] = actual_fps
+            frame_data['ail_val'] = ail_val
+            frame_data['elev_val'] = elev_val
+            frame_data['flt_mode'] = flt_ctrl.program_id  
             frames[recording_frame_num] = frame_data
          
         if render_image:
@@ -250,21 +247,15 @@ def main():
 
         # add frame to recording queue
         if gv.recording:
-            video_writer.queue.put(frame)
+            video_writer.queue.put(frame)     
 
-        # # for testing
-        # if not is_good_horizon and n % 10 == 0:
-        #     cv2.imwrite(f"detection_failures/{n}.png", frame)
-        
         # CHECK FOR INPUT
         key = cv2.waitKey(1)
         if OPERATING_SYSTEM == 'Linux':
             recording_switch_new_position = recording_switch.detect_position_change()
-        else:
-            recording_switch_new_position = None
-        if OPERATING_SYSTEM == 'Linux' and FLT_CTRL:
             autopilot_switch_new_position = autopilot_switch.detect_position_change()
         else:
+            recording_switch_new_position = None
             autopilot_switch_new_position = None
             
         if key == ord('q'):
@@ -280,12 +271,12 @@ def main():
             else:
                 horizon_detection = not horizon_detection
                 print(f'Horizon detection: {horizon_detection}')
-        elif (key == ord('a') or autopilot_switch_new_position == 1) and not autopilot:
-            autopilot = True
-            print(f'Auto-pilot: {autopilot}')
-        elif (key == ord('a') or autopilot_switch_new_position == 0) and autopilot:
-            autopilot = False
-            print(f'Auto-pilot: {autopilot}')
+        elif (key == ord('a') or autopilot_switch_new_position == 1) and flt_ctrl.program_id != 2:
+            flt_ctrl.select_program(2)
+            print('Auto-pilot on.')
+        elif (key == ord('a') or autopilot_switch_new_position == 0) and flt_ctrl.program_id == 2:
+            flt_ctrl.select_program(0)
+            print('Auto-pilot off.')
         elif (key == ord('r') or recording_switch_new_position == 1) and not gv.recording:
             # toggle the recording flag
             gv.recording = not gv.recording
@@ -310,6 +301,12 @@ def main():
             frames = {} 
             datadict['metadata'] = metadata
             datadict['frames'] = frames
+            
+            # do a surface check
+            if OPERATING_SYSTEM == 'Linux':
+                flt_ctrl.select_program(1
+                                        )
+                
         elif (key == ord('r') or recording_switch_new_position == 0) and gv.recording:
             # toggle the recording flag
             gv.recording = not gv.recording
