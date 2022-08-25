@@ -184,6 +184,9 @@ def main():
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
+    else:
+        ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode = None, None, None, None, None
+        
     
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
@@ -201,7 +204,9 @@ def main():
             roll, pitch, variance, is_good_horizon, diagnostic_mask = output
             
         # run the flight controller
-        ail_val, elev_val = flt_ctrl.run(roll, pitch, is_good_horizon) 
+        if OPERATING_SYSTEM == "Linux":
+            ail_stick_val, elev_stick_val, ail_val, elev_val = flt_ctrl.run(roll, pitch, is_good_horizon)
+            flt_mode = flt_ctrl.program_id  
 
         # save the horizon data for diagnostic purposes
         if horizon_detection and gv.recording:
@@ -217,7 +222,9 @@ def main():
             frame_data['actual_fps'] = actual_fps
             frame_data['ail_val'] = ail_val
             frame_data['elev_val'] = elev_val
-            frame_data['flt_mode'] = flt_ctrl.program_id  
+            frame_data['ail_stick_val'] = ail_stick_val
+            frame_data['elev_stick_val'] = elev_stick_val
+            frame_data['flt_mode'] = flt_mode 
             frames[recording_frame_num] = frame_data
          
         if render_image:
@@ -304,8 +311,7 @@ def main():
             
             # do a surface check
             if OPERATING_SYSTEM == 'Linux':
-                flt_ctrl.select_program(1
-                                        )
+                flt_ctrl.select_program(1)
                 
         elif (key == ord('r') or recording_switch_new_position == 0) and gv.recording:
             # toggle the recording flag
@@ -314,6 +320,10 @@ def main():
             # finish the recording, save diagnostic about recording
             if horizon_detection:
                 finish_recording()
+            
+            # wiggle servos to confirm completion of recording
+            if OPERATING_SYSTEM == 'Linux':
+                flt_ctrl.select_program(3)
 
         # DYNAMIC WAIT
         # Figure out how much longer we need to wait in order 

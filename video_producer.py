@@ -149,13 +149,6 @@ def main(mode=1, output_res=(1280,720)):
                 desired_dimensions = (desired_width, desired_height)
                 resized_frame = cv2.resize(frame, desired_dimensions)
 
-                # draw center circle
-                x = resized_frame.shape[1]//2
-                y = resized_frame.shape[0]//2
-                center = (x, y)
-                radius = resized_frame.shape[0]//72
-                cv2.circle(resized_frame, center, radius, BLUE, 2)
-
                 # draw the horizon
                 if roll != 'null':  
                     if is_good_horizon:
@@ -163,6 +156,13 @@ def main(mode=1, output_res=(1280,720)):
                     else:
                         color = (0,0,255)          
                     draw_horizon(resized_frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
+                    
+                # draw center circle
+                x = resized_frame.shape[1]//2
+                y = resized_frame.shape[0]//2
+                center = (x, y)
+                radius = resized_frame.shape[0]//72
+                cv2.circle(resized_frame, center, radius, BLUE, 2)
 
                 # resize the diagnostic mask
                 desired_width = output_res[0] - resized_frame.shape[1]
