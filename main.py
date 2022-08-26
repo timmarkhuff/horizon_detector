@@ -88,7 +88,7 @@ def main():
         choose where to write the video output and detection data
         """
         # check if there is a thumbdrive that can be used
-        supported_thumbdrives = ['Cruzer', 'SAMSUNG USB', '329A-3084']
+        supported_thumbdrives = ['Cruzer', 'SAMSUNG USB', '329A-3084', 'scratch']
         for i in supported_thumbdrives:
             file_path = f'/media/pi/{i}'
             if os.path.exists(file_path):
