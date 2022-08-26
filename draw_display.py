@@ -161,9 +161,7 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
     full_defection = int(np.round(.2 * plane_height))
     ail_width = plane_width//3
     ail_offset = plane_width//20
-    ail_deflection = int(np.round(ail_val * full_defection))
     elev_offset = ail_offset
-    elev_deflection = int(np.round(elev_val * full_defection))
 
     # draw wing
     pt1 = (left, bottom)
@@ -184,7 +182,12 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
     pt2 = (pt2x, pt2y)
     cv2.line(frame, pt1, pt2, plane_color, plane_thickness)
 
+    # If there are no surface values to draw, return early
+    if None in (ail_val, elev_val):
+        return
+
     # draw elevator
+    elev_deflection = int(np.round(elev_val * full_defection))
     pt1x = left + plane_width//2 - hor_stab_width//2 + elev_offset
     pt1y = top + plane_height - hor_stab_height - elev_deflection
     pt1 = (pt1x , pt1y)
@@ -195,6 +198,7 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
 
     # draw ailerons
     # left
+    ail_deflection = int(np.round(ail_val * full_defection))
     pt1 = (left + ail_offset, bottom)
     pt2 = (left + ail_offset + ail_width, bottom - ail_deflection)
     cv2.rectangle(frame, pt1, pt2, surface_color, -1)
