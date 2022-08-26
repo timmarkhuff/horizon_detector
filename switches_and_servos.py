@@ -150,8 +150,8 @@ class ServoHandler(TransmitterControl):
         """
         super().__init__(input_pin, weighting=0.0)
         
-        self.min_duty = 3.84
-        self.max_duty = 9.76
+        self.min_duty = 7.3 # 3.84
+        self.max_duty = 12.9 # 9.76
         self.duty_range = self.max_duty - self.min_duty
         
         # define servo
@@ -205,6 +205,7 @@ class ServoHandler(TransmitterControl):
     def read(self):       
         servo_duty = self.get_duty_cycle()
         servo_value = self.duty_to_servo_value(servo_duty)
+        # print(f'{servo_duty} | {servo_value}')
         
         # optional smoothing
         if self.smoothing:
