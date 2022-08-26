@@ -40,9 +40,8 @@ class HorizonDetector:
 
         # generate mask
         bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blur = cv2.bilateralFilter(bgr2gray,9,100,100)
-        _, mask = cv2.threshold(blur,250,255,cv2.THRESH_OTSU)
-        edges = cv2.Canny(image=blur, threshold1=100, threshold2=200) # (image=blur, threshold1=100, threshold2=200)
+        _, mask = cv2.threshold(bgr2gray,250,255,cv2.THRESH_OTSU)
+        edges = cv2.Canny(image=bgr2gray, threshold1=100, threshold2=200)
         edges = skimage.measure.block_reduce(edges, (POOLING_KERNEL_SIZE , POOLING_KERNEL_SIZE), np.max)
 
         # find contours
@@ -66,20 +65,35 @@ class HorizonDetector:
         x_original = np.array([i[0][0] for i in largest_contour])
         y_original = np.array([i[0][1] for i in largest_contour])
 
-        # Find the average position of the contour points.
+        # Separate the points that lie on the edge of the frame from all other points.
+        # Edge points will be used to find sky_is_up.
+        # All other points will be used to find the horizon.
+        x_abbr = []
+        y_abbr = []
+        x_edge_points = []
+        y_edge_points = []
+        for n, x_point in enumerate(x_original):
+            y_point = y_original[n]
+            if x_point == 0 or x_point == frame.shape[1] - 1 or \
+                y_point == 0 or y_point == frame.shape[0]- 1:
+                x_edge_points.append(x_point)
+                y_edge_points.append(y_point)
+            else:
+                x_abbr.append(x_point)
+                y_abbr.append(y_point)
+
+        # Find the average position of the edge points.
         # This will help us determine the direction of the sky.
-        avg_x = np.average(x_original)
-        avg_y = np.average(y_original)
+        # Reduce the number of edge points to improve performance.
+        maximum_number_of_points = 20
+        step_size = len(x_edge_points)//maximum_number_of_points
+        if step_size > 1:
+            x_edge_points = x_edge_points[::step_size]
+            y_edge_points = y_edge_points[::step_size]
+        avg_x = np.average(x_edge_points)
+        avg_y = np.average(y_edge_points)
 
-        # remove points that lie on the edge of the frame
-        bool_mask = np.logical_and(x_original > 1, x_original < (frame.shape[1] - 1))
-        x_abbr = x_original[bool_mask]
-        y_abbr = y_original[bool_mask]
-        bool_mask = np.logical_and(y_abbr > 1, y_abbr < (frame.shape[0] - 1))
-        x_abbr = x_abbr[bool_mask]
-        y_abbr = y_abbr[bool_mask]
-
-        # reduce the number of points to improve performance
+        # Reduce the number of horizon points to improve performance.
         maximum_number_of_points = 80
         step_size = len(x_original)//maximum_number_of_points
         if step_size > 1:
