@@ -76,7 +76,6 @@ def main():
     # global variables
     actual_fps = 0
     horizon_detection = True
-    autopilot = False
     if OPERATING_SYSTEM == 'Linux':
         render_image = False
     else:
@@ -106,19 +105,6 @@ def main():
         """
         Finishes up the recording and saves the diagnostic data file.
         """
-        # count the number of high confidence horizons
-        high_conf_horizons = 0
-        for value in datadict['frames'].values():
-            if value['is_good_horizon'] == 1:
-                high_conf_horizons += 1
-
-        # record the actual FPS
-        actual_fps_lst = []
-        for value in datadict['frames'].values():
-            actual_fps_lst.append(value['actual_fps'])
-        average_actual_fps = np.average(actual_fps_lst)
-        print(f'average_actual_fps: {average_actual_fps}')
-
         # pack up values into dictionary
         metadata['datetime'] = dt_string
         metadata['resolution'] = RESOLUTION_STR
@@ -179,8 +165,8 @@ def main():
         autopilot_switch = TransmitterSwitch(6, 2)
             
         # servo handlers
-        ail_handler = ServoHandler(13, 12, FPS, .1, 30)
-        elev_handler = ServoHandler(18, 27, FPS, .1, 30)
+        ail_handler = ServoHandler(13, 12, FPS) # , .1, 30)
+        elev_handler = ServoHandler(18, 27, FPS) # , .1, 30)
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
