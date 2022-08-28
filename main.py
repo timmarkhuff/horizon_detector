@@ -19,9 +19,10 @@ from find_horizon import HorizonDetector
 from draw_display import draw_horizon, draw_hud, draw_roi
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
 from flight_controller import FlightController
+from autoupdater import update
 
 def main():
-    print('----------STARTING HORIZON DETECTOR----------')
+    print('----------STARTING HORIZON DETECTOR----------')    
     # parse arguments
     parser = ArgumentParser()
     help_text = 'The path to the video. For webcam, enter the index of the webcam you want to use, e.g. 0 '
@@ -170,6 +171,17 @@ def main():
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
+        
+        # check for updates
+        update_path = '/media/pi/scratch/update_package'
+        files_have_been_updated = update(update_path)
+        
+        # reboot if any updates occurred 
+        if files_have_been_updated:
+            ail_handler.actuate(.5)
+            print(f'Waiting for 13 seconds...')
+            sleep(13)
+            os.system("reboot")    
     else:
         ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode = None, None, None, None, None
         

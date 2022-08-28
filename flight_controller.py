@@ -1,4 +1,5 @@
 # libraries
+import os
 import numpy as np
 from simple_pid import PID
 import random
@@ -69,10 +70,10 @@ class FlightController:
         self.elev_val = 0
         
         # Initialize PID parameters
-        self.ail_kp = .1
+        self.ail_kp = -.1
         self.ail_ki = 0
         self.ail_kd = 0
-        self.elev_kp = .1
+        self.elev_kp = -.1
         self.elev_ki = 0
         self.elev_kd = 0
 
