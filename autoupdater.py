@@ -1,10 +1,18 @@
 import os
+from time import sleep
+from switches_and_servos import ServoHandler
 
 def update(update_path):
     # check if path exists
-    if not os.path.exists(update_path):
+    timeout = 60
+    for n in range(timeout):
+        if os.path.exists(update_path):
+            break
+        else:
+            sleep(1)
+    else: 
         print('No update directory found. Please check that you have plugged in the thumbdrive.')
-        return False
+        return
     
     # check if the file is a python file
     updated_files = 0
@@ -31,17 +39,19 @@ def update(update_path):
         
         with open(f'{current_path}/{i}', 'w') as f:
             f.write(text_in_update_file)
-            print('Writing...')
         
         updated_files += 1
         
     print(f'{updated_files} files updated.')
     if updated_files > 0:
-        return True
-    else:
-        return False
+        ail_handler = ServoHandler(13, 12, 30)
+        for n in range(updated_files):
+            sleep(.5)
+            ail_handler.actuate(.5)
+            sleep(.5)
+            ail_handler.actuate(0)
+        sleep(1)           
     
 if __name__ == "__main__":
     path = '/media/pi/scratch/update_package'
-    files_have_been_updated = update(path)
-    print(f'files_have_been_updated: {files_have_been_updated}')
+    update(path)
