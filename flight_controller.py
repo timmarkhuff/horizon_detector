@@ -70,10 +70,10 @@ class FlightController:
         self.elev_val = 0
         
         # Initialize PID parameters
-        self.ail_kp = -.1
+        self.ail_kp = -.01
         self.ail_ki = 0
         self.ail_kd = 0
-        self.elev_kp = -.1
+        self.elev_kp = -.025
         self.elev_ki = 0
         self.elev_kd = 0
 
@@ -266,8 +266,8 @@ class LevelFlight(FlightProgram):
     def run(self):
         if self.flt_ctrl.is_good_horizon:
             # If the horizon is good, run the pid controller and accept the returned values.
-            self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll - 20 * self.flt_ctrl.ail_stick_val)
-            self.flt_ctrl.elev_val = self.elev_pid(self.flt_ctrl.pitch - 10 * self.flt_ctrl.elev_stick_val)
+            self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll + 20 * self.flt_ctrl.ail_stick_val)
+            self.flt_ctrl.elev_val = self.elev_pid(self.flt_ctrl.pitch + 10 * self.flt_ctrl.elev_stick_val)
         else:
             # If the horizon is not good, run the PID controller with the previous roll and pitch values.
             # Do not accept the output of the PID controller.
