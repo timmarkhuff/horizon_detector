@@ -1,15 +1,15 @@
 # standard libraries
 import cv2
 import os
+import shutil
 import platform
 import numpy as np
 from argparse import ArgumentParser
 import json
-from time import sleep
+from time impeort sleep
 from timeit import default_timer as timer
 from itertools import count
 from datetime import datetime
-from math import sqrt
 
 # my libraries
 from video_classes import CustomVideoCapture, CustomVideoWriter
@@ -82,26 +82,6 @@ def main():
         render_image = True
 
     # functions
-    def determine_file_path() -> str:
-        """
-        choose where to write the video output and detection data
-        """
-        # check if there is a thumbdrive that can be used
-        supported_thumbdrives = ['Cruzer', 'SAMSUNG USB', '329A-3084', 'scratch']
-        for i in supported_thumbdrives:
-            file_path = f'/media/pi/{i}'
-            if os.path.exists(file_path):
-                file_path += '/recordings'
-                break
-        else:
-            file_path = 'recordings'
-            
-        # check if the folder exists, if not, create it
-        if not os.path.exists(file_path):
-            os.makedirs(file_path)
-            
-        return file_path
-
     def finish_recording():
         """
         Finishes up the recording and saves the diagnostic data file.
@@ -124,7 +104,23 @@ def main():
         with open(f'{file_path}/{dt_string}.json', 'w') as convert_file: 
             convert_file.write(json.dumps(datadict))
         print('Diagnostic data saved.')
-
+            
+        # check if the thumbdrive is attached
+        thumbdrive = '/media/pi/scratch'
+        if not os.path.exists(thumbdrive):
+            return
+        
+        # check if the recordings folder exists on the thumbdrive
+        # if not, create it
+        dst = f'{thumbdrive}/recordings'
+        if not os.path.exists(dst):
+            os.makedirs(dst)
+        
+        # move files to thumbdrive
+        src_folder = '/home/pi/horizon_detector/recordings'
+        for file in os.listdir(src_folder):
+                shutil.copy(f'{src_folder}/{file}', dst)
+        
     # define VideoCapture
     video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
 
@@ -141,13 +137,12 @@ def main():
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
     
-    # Define the exclusion threshold in terms of the height of INFERENCE_RESOLUTION.
-    # EXCLUSION_THRESH is the distance from the previous horizon beyond which  
+    # EXCLUSION_THRESH is the angle above and below the previous horizon beyond which  
     # contour points will be filtered out.
-    EXCLUSION_THRESH = 10
+    EXCLUSION_THRESH = 8
 
     # define the HorizonDetector
-    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE)
+    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, scaled_and_croppe_frame.shape[0])
 
     # start VideoStreamer
     video_capture.start_stream()
@@ -171,13 +166,7 @@ def main():
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
-        
-#         # reboot if any updates occurred 
-#         if files_have_been_updated:
-#             ail_handler.actuate(.5)
-#             print(f'Waiting for 13 seconds...')
-#             sleep(13)
-#             os.system("reboot")    
+          
     else:
         ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode = None, None, None, None, None
           
@@ -291,7 +280,7 @@ def main():
             filename = f'{dt_string}.avi'
 
             # start the CustomVideoWriter
-            file_path = determine_file_path()
+            file_path = 'recordings'
             video_writer = CustomVideoWriter(filename, file_path, video_capture.resolution, FPS)
             video_writer.start_writing()
 

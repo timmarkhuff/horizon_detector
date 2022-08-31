@@ -37,6 +37,7 @@ def update(update_path):
         if text_in_update_file == text_in_current_file:
             continue
         
+        # write the new values to the code base
         with open(f'{current_path}/{i}', 'w') as f:
             f.write(text_in_update_file)
         
@@ -50,8 +51,8 @@ def update(update_path):
             ail_handler.actuate(.5)
             sleep(.5)
             ail_handler.actuate(0)
-        sleep(1)           
+        sleep(2)           
     
 if __name__ == "__main__":
-    path = '/media/pi/scratch/update_package'
+    path = '/media/pi/Samsung USB/update_package'
     update(path)
