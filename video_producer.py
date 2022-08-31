@@ -70,8 +70,6 @@ def main(mode=1, output_res=(1280,720)):
         fps = datadict['metadata']['fps']
         resolution_str = datadict['metadata']['resolution']
         inf_resolution_str = datadict['metadata']['inference_resolution']
-        inf_resolution_str = datadict['metadata']['inference_resolution']
-        inf_resolution_str = datadict['metadata']['inference_resolution']
         exclusion_thresh = datadict['metadata']['exclusion_thresh']
         acceptable_variance = datadict['metadata']['acceptable_variance']
         fov = datadict['metadata']['fov']
@@ -92,7 +90,7 @@ def main(mode=1, output_res=(1280,720)):
         crop_and_scale_parameters = get_cropping_and_scaling_parameters(resolution, inf_resolution)
 
         # define the HorizonDetector
-        horizon_detector = HorizonDetector(exclusion_thresh, fov, acceptable_variance, inf_resolution[0])
+        horizon_detector = HorizonDetector(exclusion_thresh, fov, acceptable_variance, inf_resolution)
 
         frame_num = 0
         while True:

@@ -15,22 +15,26 @@ OPERATING_SYSTEM = platform.system()
 POOLING_KERNEL_SIZE = 5
 
 class HorizonDetector:
-    def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float, frame_height: int):
+    def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float, frame_shape: tuple):
         """
         exclusion_thresh: parameter that controls how close horizon points have to be
         to predicted horizon in order to be considered valid
         fov: field of view of the camera
         acceptable_variance: minimum acceptable variance for horizon contour points.
-        frame_height: together with fov used to convert exclusion_thresh 
+        frame_shape: together with fov used to convert exclusion_thresh 
         from a pitch angle to pixels
         """
         self.exclusion_thresh = exclusion_thresh # in degrees of pitch
-        self.exclusion_thresh_pixels = exclusion_thresh * frame_height // fov
+        self.exclusion_thresh_pixels = exclusion_thresh * frame_shape[0] // fov
         self.fov = fov
         self.acceptable_variance = acceptable_variance
         self.predicted_roll = None
         self.predicted_pitch = None
         self.recent_horizons = [None, None]
+
+        # create a blank diagnostic map to return in case one cannot be generated
+        # self.blank_diagnostic_mask = np.zeros((frame_shape[0], frame_shape[1], 3), dtype = "uint8")
+        # self.blank_diagnostic_mask = cv2.cvtColor(blank_diagnostic_mask, cv2.COLOR_GRAY2BGR)s
 
     def find_horizon(self, frame:np.ndarray, diagnostic_mode:bool=False) -> dict:
         """
@@ -39,7 +43,7 @@ class HorizonDetector:
         testing, as it slows down performance.
         """
         # default values to return if no horizon can be found
-        roll, pitch, variance, is_good_horizon, mask = None, None, None, None, None
+        roll, pitch, variance, is_good_horizon = None, None, None, None
 
         # get greyscale
         bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -52,10 +56,9 @@ class HorizonDetector:
         blue_filtered_greyscale = cv2.add(bgr2gray, hsv_mask)
 
         # generate mask
-        # blur = cv2.GaussianBlur(bgr2gray,(3,3),0)
-        blur = cv2.bilateralFilter(blue_filtered_greyscale,9,50,50) # 75, 75
+        blur = cv2.bilateralFilter(blue_filtered_greyscale,9,50,50)
         _, mask = cv2.threshold(blur,250,255,cv2.THRESH_OTSU)
-        edges = cv2.Canny(image=bgr2gray, threshold1=200, threshold2=250) # threshold1=100, threshold2=200)
+        edges = cv2.Canny(image=bgr2gray, threshold1=200, threshold2=250) 
         edges = skimage.measure.block_reduce(edges, (POOLING_KERNEL_SIZE , POOLING_KERNEL_SIZE), np.max)
 
         # find contours
@@ -66,10 +69,15 @@ class HorizonDetector:
         else: # for windows
             contours, _ = cv2.findContours(mask, cv2.RETR_TREE, chain)
 
+        # If there weren't any contours found (i.e. the image was all black),
+        # end early, returning None values and the mask.
         if len(contours) == 0:
-            # If there are too few contours to find a horizon,
-            # return a dictionary of None values.
+            # predict the next horizon
             self._predict_next_horizon()
+
+            # convert the diagnostic image to color
+            if diagnostic_mode:
+                mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
             return roll, pitch, variance, is_good_horizon, mask
 
         # find the contour with the largest area
@@ -97,7 +105,7 @@ class HorizonDetector:
                 y_abbr.append(y_point)
 
         # Find the average position of the edge points.
-        # This will help us determine the direction of the sky.
+        # This will help determine the direction of the sky.
         # Reduce the number of edge points to improve performance.
         maximum_number_of_points = 20
         step_size = len(x_edge_points)//maximum_number_of_points
@@ -205,12 +213,8 @@ class HorizonDetector:
             _, edges_binary = cv2.threshold(edges,10,255,cv2.THRESH_BINARY)
             edges_binary = cv2.resize(edges_binary, desired_dimensions)
             cv2.imshow('canny', edges_binary)
-            # blur = cv2.resize(blur, desired_dimensions)
-            # cv2.imshow('blur', blur)
             blue_filtered_greyscale = cv2.resize(blue_filtered_greyscale, desired_dimensions)
             cv2.imshow('blue_filtered_greyscale', blue_filtered_greyscale)
-            # hsv_mask = cv2.resize(hsv_mask, desired_dimensions)
-            # cv2.imshow('hsv_mask', hsv_mask)
                 
         # Return None values for horizon, since too few points were found.
         if x_filtered.shape[0] < 12:
@@ -345,7 +349,7 @@ if __name__ == "__main__":
 
     # define the HorizonDetector
     frame_small = crop_and_scale(frame, **CROP_AND_SCALE_PARAM)
-    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, frame.shape[0])
+    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION)
 
     # find the horizon
     print('Starting perf test...')

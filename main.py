@@ -144,10 +144,10 @@ def main():
     
     # EXCLUSION_THRESH is the angle above and below the previous horizon beyond which  
     # contour points will be filtered out.
-    EXCLUSION_THRESH = 8
+    EXCLUSION_THRESH = 5
 
     # define the HorizonDetector
-    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION[0])
+    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION)
     
     # perform some start-up operations specific to the Raspberry Pi
     if OPERATING_SYSTEM == "Linux":
