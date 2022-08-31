@@ -15,14 +15,17 @@ OPERATING_SYSTEM = platform.system()
 POOLING_KERNEL_SIZE = 5
 
 class HorizonDetector:
-    def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float):
+    def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float, frame_height: int):
         """
         exclusion_thresh: parameter that controls how close horizon points have to be
         to predicted horizon in order to be considered valid
         fov: field of view of the camera
         acceptable_variance: minimum acceptable variance for horizon contour points.
+        frame_height: together with fov used to convert exclusion_thresh 
+        from a pitch angle to pixels
         """
-        self.exclusion_thresh = exclusion_thresh
+        self.exclusion_thresh = exclusion_thresh # in degrees of pitch
+        self.exclusion_thresh_pixels = exclusion_thresh * frame_height // fov
         self.fov = fov
         self.acceptable_variance = acceptable_variance
         self.predicted_roll = None
@@ -35,13 +38,24 @@ class HorizonDetector:
         diagnostic_mode: if True, draws a diagnostic visualization. Should only be used for
         testing, as it slows down performance.
         """
-        # default value to return if no horizon can be found
+        # default values to return if no horizon can be found
         roll, pitch, variance, is_good_horizon, mask = None, None, None, None, None
 
-        # generate mask
+        # get greyscale
         bgr2gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, mask = cv2.threshold(bgr2gray,250,255,cv2.THRESH_OTSU)
-        edges = cv2.Canny(image=bgr2gray, threshold1=100, threshold2=200)
+
+        # filter our blue from the sky
+        lower = np.array([109, 0, 116]) 
+        upper = np.array([153, 255, 255]) 
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv_mask = cv2.inRange(hsv, lower, upper)
+        blue_filtered_greyscale = cv2.add(bgr2gray, hsv_mask)
+
+        # generate mask
+        # blur = cv2.GaussianBlur(bgr2gray,(3,3),0)
+        blur = cv2.bilateralFilter(blue_filtered_greyscale,9,50,50) # 75, 75
+        _, mask = cv2.threshold(blur,250,255,cv2.THRESH_OTSU)
+        edges = cv2.Canny(image=bgr2gray, threshold1=200, threshold2=250) # threshold1=100, threshold2=200)
         edges = skimage.measure.block_reduce(edges, (POOLING_KERNEL_SIZE , POOLING_KERNEL_SIZE), np.max)
 
         # find contours
@@ -147,7 +161,7 @@ class HorizonDetector:
             # is reasonably close to it.
             p3 = np.array([x_point, y_point])
             distance = norm(np.cross(p2_minus_p1, p1-p3))/norm(p2_minus_p1)
-            if distance < self.exclusion_thresh:
+            if distance < self.exclusion_thresh_pixels:
                 x_filtered.append(x_point)
                 y_filtered.append(y_point)
 
@@ -179,15 +193,27 @@ class HorizonDetector:
                 cv2.circle(mask, (circle_x, circle_y), 5, (0,255,0), -1)
             # draw the predicted horizon, if there is one
             if self.predicted_roll:
-                draw_horizon(mask, self.predicted_roll, self.predicted_pitch, self.fov, (0,150,255),  False)
+                roll = self.predicted_roll
+                pitch = self.predicted_pitch + self.exclusion_thresh
+                draw_horizon(mask, roll, pitch, self.fov, (0,150,255),  False)
+                roll = self.predicted_roll
+                pitch = self.predicted_pitch - self.exclusion_thresh
+                draw_horizon(mask, roll, pitch, self.fov, (0,150,255),  False)
+                cv2.putText(mask, 'Horizon Lock',(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,(0,150,255),1,cv2.LINE_AA)
 
             # for testing
-            edges = cv2.resize(edges, desired_dimensions)
             _, edges_binary = cv2.threshold(edges,10,255,cv2.THRESH_BINARY)
+            edges_binary = cv2.resize(edges_binary, desired_dimensions)
             cv2.imshow('canny', edges_binary)
+            # blur = cv2.resize(blur, desired_dimensions)
+            # cv2.imshow('blur', blur)
+            blue_filtered_greyscale = cv2.resize(blue_filtered_greyscale, desired_dimensions)
+            cv2.imshow('blue_filtered_greyscale', blue_filtered_greyscale)
+            # hsv_mask = cv2.resize(hsv_mask, desired_dimensions)
+            # cv2.imshow('hsv_mask', hsv_mask)
                 
         # Return None values for horizon, since too few points were found.
-        if x_filtered.shape[0] < 10:
+        if x_filtered.shape[0] < 12:
             self._predict_next_horizon()
             return roll, pitch, variance, is_good_horizon, mask
 
@@ -313,12 +339,13 @@ if __name__ == "__main__":
     INFERENCE_RESOLUTION = (100, 100)
     RESOLUTION = frame.shape[1::-1] # extract the resolution from the frame
     CROP_AND_SCALE_PARAM = get_cropping_and_scaling_parameters(RESOLUTION, INFERENCE_RESOLUTION)
-    EXCLUSION_THRESH = 10
+    EXCLUSION_THRESH = 5 # degrees of pitch above and below the horizon
     FOV = 48.8
     ACCEPTABLE_VARIANCE = 1.3 
 
     # define the HorizonDetector
-    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE)
+    frame_small = crop_and_scale(frame, **CROP_AND_SCALE_PARAM)
+    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, frame.shape[0])
 
     # find the horizon
     print('Starting perf test...')
