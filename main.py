@@ -6,7 +6,7 @@ import platform
 import numpy as np
 from argparse import ArgumentParser
 import json
-from time impeort sleep
+from time import sleep
 from timeit import default_timer as timer
 from itertools import count
 from datetime import datetime
@@ -121,8 +121,6 @@ def main():
         for file in os.listdir(src_folder):
                 shutil.copy(f'{src_folder}/{file}', dst)
         
-    # define VideoCapture
-    video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
 
     # paused frame displayed when real-time display is not active
     paused_frame = np.zeros((500, 500, 1), dtype = "uint8")
@@ -134,6 +132,13 @@ def main():
     cv2.putText(paused_frame, "Press 'q' to quit.",(20,180),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
     cv2.imshow("Real-time Display", paused_frame)
 
+    # define VideoCapture
+    video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
+
+    # start VideoStreamer
+    video_capture.start_stream()
+    sleep(1)
+
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
     
@@ -142,11 +147,7 @@ def main():
     EXCLUSION_THRESH = 8
 
     # define the HorizonDetector
-    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, scaled_and_croppe_frame.shape[0])
-
-    # start VideoStreamer
-    video_capture.start_stream()
-    sleep(1)
+    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION[0])
     
     # perform some start-up operations specific to the Raspberry Pi
     if OPERATING_SYSTEM == "Linux":

@@ -54,5 +54,5 @@ def update(update_path):
         sleep(2)           
     
 if __name__ == "__main__":
-    path = '/media/pi/Samsung USB/update_package'
+    path = '/media/pi/scratch/update_package'
     update(path)
