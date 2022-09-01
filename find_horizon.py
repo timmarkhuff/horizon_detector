@@ -223,6 +223,8 @@ class HorizonDetector:
             cv2.imshow('canny', edges_binary)
             blue_filtered_greyscale = cv2.resize(blue_filtered_greyscale, desired_dimensions)
             cv2.imshow('blue_filtered_greyscale', blue_filtered_greyscale)
+            mask = cv2.resize(mask, desired_dimensions)
+            cv2.imshow('mask', mask)
                 
         # Return None values for horizon, since too few points were found.
         if x_filtered.shape[0] < 12:
