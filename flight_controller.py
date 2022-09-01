@@ -56,8 +56,9 @@ class FlightController:
         self.select_program(1)
 
         # keep track of recent detection scores for n second(s)
-        n = 1 # seconds
-        self.horizon_detection_list = [0 for n in range(n * fps)]
+        n = .25 # seconds
+        number_of_frames_to_remember = int(np.round(n * fps))
+        self.horizon_detection_list = [0 for n in range(number_of_frames_to_remember)]
         
         self.ail_val = 0
         self.elev_val = 0

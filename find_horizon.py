@@ -112,8 +112,16 @@ class HorizonDetector:
         if step_size > 1:
             x_edge_points = x_edge_points[::step_size]
             y_edge_points = y_edge_points[::step_size]
-        avg_x = np.average(x_edge_points)
-        avg_y = np.average(y_edge_points)
+        
+        # Check if there are any edge points. If there are, take the average of them to determine
+        # sky_is_up. If there aren't any edge points, take the average of the abbreviated point list
+        # instead, since it is not possible to take the average of an empty list.
+        if x_edge_points:
+            avg_x = np.average(x_edge_points)
+            avg_y = np.average(y_edge_points)
+        else:
+            avg_x = np.average(x_abbr)
+            avg_y = np.average(y_abbr)
 
         # Reduce the number of horizon points to improve performance.
         maximum_number_of_points = 80
@@ -264,6 +272,7 @@ class HorizonDetector:
             p3 = np.array([x_point, y_point])
             distance = norm(np.cross(p2_minus_p1, p1-p3))/norm(p2_minus_p1)
             distance_list.append(distance)
+            
         variance = np.average(distance_list) / frame.shape[0] * 100
         
         # adjust the roll within the range of 0 - 360 degrees
