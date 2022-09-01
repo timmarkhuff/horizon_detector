@@ -149,9 +149,15 @@ def main():
     # define the HorizonDetector
     horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION)
     
+    # initialize some values related to the flight controller
+    recording_switch_new_position = None
+    autopilot_switch_new_position = None
+    ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode = None, None, None, None, None
+    pitch_trim = 0
+    
     # perform some start-up operations specific to the Raspberry Pi
     if OPERATING_SYSTEM == "Linux":
-        from switches_and_servos import ServoHandler, TransmitterSwitch
+        from switches_and_servos import ServoHandler, TransmitterSwitch, TrimReader
         
         # disable wifi and bluetooth on Raspberry Pi
         wifi_response, bluetooth_response = disable_wifi_and_bluetooth()
@@ -167,9 +173,10 @@ def main():
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
-          
-    else:
-        ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode = None, None, None, None, None
+        
+        # pitch trim reader
+        pitch_trim_reader = TrimReader(input_pin=25)
+        
           
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
@@ -188,7 +195,11 @@ def main():
             
         # run the flight controller
         if OPERATING_SYSTEM == "Linux":
-            ail_stick_val, elev_stick_val, ail_val, elev_val = flt_ctrl.run(roll, pitch, is_good_horizon)
+            if pitch is not None:
+                adjusted_pitch = pitch + pitch_trim
+            else:
+                adjusted_pitch = None
+            ail_stick_val, elev_stick_val, ail_val, elev_val = flt_ctrl.run(roll, adjusted_pitch, is_good_horizon)
             flt_mode = flt_ctrl.program_id  
 
         # save the horizon data for diagnostic purposes
@@ -207,13 +218,21 @@ def main():
             frame_data['elev_val'] = elev_val
             frame_data['ail_stick_val'] = ail_stick_val
             frame_data['elev_stick_val'] = elev_stick_val
-            frame_data['flt_mode'] = flt_mode 
+            frame_data['flt_mode'] = flt_mode
+            frame_data['pitch_trim'] = pitch_trim 
             frames[recording_frame_num] = frame_data
          
         if render_image:
             frame_copy = frame.copy() # copy the frame so that we have an unmarked frame to draw on
             # draw roi
             draw_roi(frame_copy, crop_and_scale_parameters)
+            
+            # draw pitch trim
+            if roll and is_good_horizon:
+                color = (240,240,240)
+                adjusted_pitch = pitch + pitch_trim
+                draw_horizon(frame_copy, roll, adjusted_pitch, FOV, color, draw_groundline=False)
+            
             # draw horizon
             if roll:
                 if is_good_horizon:
@@ -239,15 +258,19 @@ def main():
         if gv.recording:
             video_writer.queue.put(frame)     
 
-        # CHECK FOR INPUT
-        key = cv2.waitKey(1)
+        # check for user input
         if OPERATING_SYSTEM == 'Linux':
-            recording_switch_new_position = recording_switch.detect_position_change()
             autopilot_switch_new_position = autopilot_switch.detect_position_change()
-        else:
-            recording_switch_new_position = None
-            autopilot_switch_new_position = None
             
+        if OPERATING_SYSTEM == 'Linux' and flt_mode != 2:
+            recording_switch_new_position = recording_switch.detect_position_change()
+        elif OPERATING_SYSTEM == 'Linux' and flt_mode == 2:
+            recording_switch_new_position = None
+            pitch_trim = pitch_trim_reader.read()
+               
+        key = cv2.waitKey(1)
+        
+        # do things based on detected user input
         if key == ord('q'):
             break
         elif key == ord('d'):

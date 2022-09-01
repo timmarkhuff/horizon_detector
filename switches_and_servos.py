@@ -213,7 +213,32 @@ class ServoHandler(TransmitterControl):
             del self.recent_servo_readings[0]
             servo_value = np.average(self.recent_servo_readings)
         
-        return servo_value                 
+        return servo_value
+    
+class TrimReader(TransmitterControl):
+    def __init__(self, input_pin, pwm_min=1372, pwm_max=1648, max_trim=5, weighting=0.0):
+
+        super().__init__(input_pin, weighting=0.0)
+        
+        self.pwm_min = pwm_min
+        self.pwm_max = pwm_max
+        self.max_trim = max_trim
+        self.pwm_range = self.pwm_max - self.pwm_min
+        self.pwm_half_range = self.pwm_range / 2
+        self.mid_point = self.pwm_min + self.pwm_half_range
+        
+    def read(self) -> int:
+        # get the pulse width
+        pw = self.get_pulse_width()
+        
+        trim = (pw - self.mid_point) / self.pwm_half_range * self.max_trim
+        
+        if trim > self.max_trim:
+            trim = self.max_trim
+        elif trim < -1 * self.max_trim:
+            trim = -1 * self.max_trim
+        
+        return trim
                               
 # Demo
 if __name__ == '__main__':

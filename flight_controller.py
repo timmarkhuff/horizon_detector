@@ -1,4 +1,4 @@
-# libraries
+# # libraries
 import os
 import numpy as np
 from simple_pid import PID
@@ -50,7 +50,7 @@ class FlightController:
 
         # constants
         self.INTERRUPTABLE_PROGRAMS = [1, 3]
-        self.INTERRUPT_THRESH = .2
+        self.INTERRUPT_THRESH = .25
 
         # set the default flight program
         self.select_program(1)

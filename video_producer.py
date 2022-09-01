@@ -107,6 +107,7 @@ def main(mode=1, output_res=(1280,720)):
             ail_val = datadict['frames'][dict_key]['ail_val']
             elev_val = datadict['frames'][dict_key]['elev_val']
             flt_mode = datadict['frames'][dict_key]['flt_mode']
+            pitch_trim = datadict['frames'][dict_key]['pitch_trim']
 
             # normal mode (without diagnostic mask)
             if mode == 0:
@@ -146,7 +147,12 @@ def main(mode=1, output_res=(1280,720)):
                 desired_width = int(np.round(frame.shape[1] * scale_factor))
                 desired_dimensions = (desired_width, desired_height)
                 resized_frame = cv2.resize(frame, desired_dimensions)
-
+                
+                # draw pitch trim location
+                if is_good_horizon:
+                    color = (255,255,255)
+                    draw_horizon(resized_frame, roll, pitch + pitch_trim, fov, color, draw_groundline=False)
+                
                 # draw the horizon
                 if roll != 'null':  
                     if is_good_horizon:
