@@ -216,7 +216,7 @@ class ServoHandler(TransmitterControl):
         return servo_value
     
 class TrimReader(TransmitterControl):
-    def __init__(self, input_pin, pwm_min=1372, pwm_max=1648, max_trim=5, weighting=0.0):
+    def __init__(self, input_pin, pwm_min=1094, pwm_max=1926, max_trim=5, weighting=0.0):
 
         super().__init__(input_pin, weighting=0.0)
         
@@ -239,72 +239,56 @@ class TrimReader(TransmitterControl):
             trim = -1 * self.max_trim
         
         return trim
-                              
+    
+    
+class PWReader(TransmitterControl):
+    def __init__(self, input_pin):
+        """For diagnostic purposes"""
+        super().__init__(input_pin, weighting=0.0)
+        
+    def read(self) -> int:
+        print('Measuring PW values...')
+        testing_duration = 10 # seconds
+        fps = 30
+        freq = 1 / fps
+        iterations = int(np.round(testing_duration * fps))
+        pw = self.get_pulse_width()
+        min_pw, max_pw = pw, pw
+        pw_readings = []
+        for n in range(iterations):
+            # get the pulse width
+            pw = self.get_pulse_width()
+            pw_readings.append(pw)
+            
+            if pw < min_pw:
+                min_pw = pw
+            elif pw > max_pw:
+                max_pw = pw
+                
+            sleep(freq)
+            
+            if n % fps == 0:
+                average = np.average(pw_readings)
+                print(f'average: {average}')
+                print(f'max_pw: {max_pw}')
+                print(f'min_pw: {min_pw}')
+                print('--------------------')
+                
+            
+        average = np.average(pw_readings)
+        print('--------------------')
+        print('--------------------')
+        print('FINAL RESULTS')
+        print(f'average: {average}')
+        print(f'max_pw: {max_pw}')
+        print(f'min_pw: {min_pw}')
+        print('--------------------')
+        print('--------------------')
+        
+                       
 # Demo
 if __name__ == '__main__':
-    from time import sleep
-    from timeit import default_timer as timer
+    pitch_trim_reader = PWReader(25)
+    pitch_trim_reader.read()
     
-    # globals
-    FPS = 30
-    WAIT_TIME = 1 / FPS
-    autopilot = False
     
-    # define the transmitter switch
-    input_pin = 26
-    switch = TransmitterSwitch(input_pin, 2)
-    
-    # define servo handler
-    input_pin = 4
-    output_pin = 18
-    servo_handler = ServoHandler(input_pin, output_pin)
-    
-    # initialize some values for diagnostics
-    max_pwm = 0
-    min_pwm = 1000000
-    
-    # start demo
-    t1 = timer()
-    print('Demo starting...')
-    n = 0
-    while True:
-        # assess the timer
-        t2 = timer()
-        if t2 - t1 > 60:
-            break
-        # wait
-        sleep(WAIT_TIME)
-        
-        # read the switch
-        pw = switch.get_pulse_width()
-        current_position = switch.get_current_position()
-        new_position = switch.detect_position_change()
-        
-        # print out the switch reading every second
-        if n % FPS == 0:
-            print(f'pulse width: {pw} | current_position: {current_position} | new_position: {new_position}')
-            print('-----------------------------')
-        
-            # update max and min PWM values
-            if pw > max_pwm:
-                max_pwm = pw
-            if pw < min_pwm:
-                min_pwm = pw
-        
-        # toggle autopilot
-        if new_position == 1:
-            autopilot = True
-        elif new_position == 0:
-            autopilot = False
-        
-        if autopilot:
-            pass
-        else:
-            servo_handler.passthrough()     
-
-        # increment iteration number
-        n += 1
-    
-    print('Demo finished.')
-    print(f'min_pwm: {min_pwm}')
-    print(f'max_pwm: {max_pwm}')
