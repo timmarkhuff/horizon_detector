@@ -252,7 +252,6 @@ def main():
 
             # show image
             cv2.imshow("Real-time Display", frame_copy)
-            cv2.imshow("Diagnostic Mask", diagnostic_mask)
 
         # add frame to recording queue
         if gv.recording:
