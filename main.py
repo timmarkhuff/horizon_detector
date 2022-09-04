@@ -144,7 +144,7 @@ def main():
     
     # EXCLUSION_THRESH is the angle above and below the previous horizon beyond which  
     # contour points will be filtered out.
-    EXCLUSION_THRESH = 5
+    EXCLUSION_THRESH = 4
 
     # define the HorizonDetector
     horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION)

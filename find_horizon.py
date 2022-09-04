@@ -12,7 +12,7 @@ from draw_display import draw_horizon
 # constants
 FULL_ROTATION = 360
 OPERATING_SYSTEM = platform.system()
-POOLING_KERNEL_SIZE = 5
+POOLING_KERNEL_SIZE = 3
 
 class HorizonDetector:
     def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float, frame_shape: tuple):
@@ -36,7 +36,7 @@ class HorizonDetector:
         # self.blank_diagnostic_mask = np.zeros((frame_shape[0], frame_shape[1], 3), dtype = "uint8")
         # self.blank_diagnostic_mask = cv2.cvtColor(blank_diagnostic_mask, cv2.COLOR_GRAY2BGR)s
 
-    def find_horizon(self, frame:np.ndarray, diagnostic_mode:bool=False) -> dict:
+    def find_horizon(self, frame:np.ndarray, diagnostic_mode:bool=False):
         """
         frame: the image in which you want to find the horizon
         diagnostic_mode: if True, draws a diagnostic visualization. Should only be used for
@@ -124,7 +124,7 @@ class HorizonDetector:
             avg_y = np.average(y_abbr)
 
         # Reduce the number of horizon points to improve performance.
-        maximum_number_of_points = 80
+        maximum_number_of_points = 100
         step_size = len(x_original)//maximum_number_of_points
         if step_size > 1:
             x_abbr = x_abbr[::step_size]
@@ -209,12 +209,10 @@ class HorizonDetector:
                 cv2.circle(mask, (circle_x, circle_y), 5, (0,255,0), -1)
             # draw the predicted horizon, if there is one
             if self.predicted_roll:
-                roll = self.predicted_roll
-                pitch = self.predicted_pitch + self.exclusion_thresh
-                draw_horizon(mask, roll, pitch, self.fov, (0,150,255),  False)
-                roll = self.predicted_roll
-                pitch = self.predicted_pitch - self.exclusion_thresh
-                draw_horizon(mask, roll, pitch, self.fov, (0,150,255),  False)
+                lower_pitch = self.predicted_pitch + self.exclusion_thresh
+                draw_horizon(mask, self.predicted_roll, lower_pitch, self.fov, (0,150,255),  False)
+                upper_pitch = self.predicted_pitch - self.exclusion_thresh
+                draw_horizon(mask, self.predicted_roll, upper_pitch, self.fov, (0,150,255),  False)
                 cv2.putText(mask, 'Horizon Lock',(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,(0,150,255),1,cv2.LINE_AA)
 
             # for testing
