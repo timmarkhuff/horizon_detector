@@ -12,7 +12,7 @@ from draw_display import draw_horizon
 # constants
 FULL_ROTATION = 360
 OPERATING_SYSTEM = platform.system()
-POOLING_KERNEL_SIZE = 3
+POOLING_KERNEL_SIZE = 5
 
 class HorizonDetector:
     def __init__(self, exclusion_thresh: float, fov: float, acceptable_variance: float, frame_shape: tuple):
