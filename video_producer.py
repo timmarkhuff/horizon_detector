@@ -13,7 +13,7 @@ from find_horizon import HorizonDetector
 # constants
 BLUE = (255,0,0)
 
-def main(mode=1, output_res=(1280,720)):
+def main(output_res=(1280,720)):
     # check if the folder exists, if not, create it
     recordings_path = "recordings"
     if not os.path.exists(recordings_path):
@@ -109,104 +109,88 @@ def main(mode=1, output_res=(1280,720)):
             flt_mode = datadict['frames'][dict_key]['flt_mode']
             pitch_trim = datadict['frames'][dict_key]['pitch_trim']
 
-            # normal mode (without diagnostic mask)
-            if mode == 0:
-                # draw_roi
-                draw_roi(frame, crop_and_scale_parameters)
 
-                # draw center circle
-                x = frame.shape[1]//2
-                y = frame.shape[0]//2
-                center = (x, y)
-                radius = frame.shape[0]//72
-                cv2.circle(frame, center, radius, BLUE, 2)
+            scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
+            output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=True)
+            roll, pitch, variance, is_good_horizon, diagnostic_mask = output
 
-                # draw the horizon
-                if roll != 'null':  
-                    if is_good_horizon:
-                        color = (255,0,0)
-                    else:
-                        color = (0,0,255)          
-                    draw_horizon(frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
+            # determine flight mode color
+            if flt_mode != 0:
+                flt_mode_color = (0,255,0)
+            else:
+                flt_mode_color = (255,0,0)
 
-                # draw HUD
-                draw_hud(frame, roll, pitch, actual_fps, is_good_horizon)
+            # draw_roi
+            draw_roi(frame, crop_and_scale_parameters)
 
-            # advanced mode (with diagnostic mask)
-            elif mode == 1:
-                scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
-                output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=True)
-                roll, pitch, variance, is_good_horizon, diagnostic_mask = output
-
-                # draw_roi
-                draw_roi(frame, crop_and_scale_parameters)
-
-                # resize the main frame
-                desired_height = output_res[1]
-                scale_factor = desired_height / frame.shape[0]
-                desired_width = int(np.round(frame.shape[1] * scale_factor))
-                desired_dimensions = (desired_width, desired_height)
-                resized_frame = cv2.resize(frame, desired_dimensions)
-                
-                # draw pitch trim location
+            # resize the main frame
+            desired_height = output_res[1]
+            scale_factor = desired_height / frame.shape[0]
+            desired_width = int(np.round(frame.shape[1] * scale_factor))
+            desired_dimensions = (desired_width, desired_height)
+            resized_frame = cv2.resize(frame, desired_dimensions)
+            
+            # draw pitch trim location
+            if is_good_horizon:
+                color = (255,255,255)
+                draw_horizon(resized_frame, roll, pitch + pitch_trim, fov, color, draw_groundline=False)
+            
+            # draw the horizon
+            if roll != 'null':  
                 if is_good_horizon:
-                    color = (255,255,255)
-                    draw_horizon(resized_frame, roll, pitch + pitch_trim, fov, color, draw_groundline=False)
-                
-                # draw the horizon
-                if roll != 'null':  
-                    if is_good_horizon:
-                        color = (255,0,0)
-                    else:
-                        color = (0,0,255)          
-                    draw_horizon(resized_frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
-                    
-                # draw center circle
-                x = resized_frame.shape[1]//2
-                y = resized_frame.shape[0]//2
-                center = (x, y)
-                radius = resized_frame.shape[0]//72
-                cv2.circle(resized_frame, center, radius, BLUE, 2)
-
-                # resize the diagnostic mask
-                desired_width = output_res[0] - resized_frame.shape[1]
-                scale_factor = desired_width / diagnostic_mask.shape[1]
-                desired_height = int(np.round(diagnostic_mask.shape[0] * scale_factor))
-                desired_dimensions = (desired_width, desired_height)
-                resized_diagnostic_mask = cv2.resize(diagnostic_mask, desired_dimensions)
-
-                # stats canvas
-                width = resized_diagnostic_mask.shape[1]
-                height = (output_res[1] - resized_diagnostic_mask.shape[0]) // 2
-                stats_canvas = np.zeros((height, width, 3), dtype = "uint8")
-                stats_canvas.fill(210)
-
-                # servo visualization canvas
-                surface_canvas = stats_canvas.copy()
-
-                # draw border lines
-                border_elements = [stats_canvas, resized_diagnostic_mask, surface_canvas]
-                for element in border_elements:
-                    points = [(0,0),(element.shape[1],0),(element.shape[1],element.shape[0]),(0,element.shape[1])]
-                    for idx, pt in enumerate(points):
-                        next_idx = idx + 1
-                        if next_idx >= len(points):
-                            pt2 = points[0]
-                        else:
-                            pt2 = points[next_idx]
-                        cv2.line(element, pt, pt2, BLUE, 3)
-                
-                # draw control surfaces and other elements of the HUD
-                if flt_mode != 0:
-                    surface_color = (0,255,0)
+                    color = (255,0,0)
                 else:
-                    surface_color = (0,0,255)
-                draw_surfaces(surface_canvas, .1, .9, .35, .65, ail_val, elev_val, surface_color)
-                draw_hud(stats_canvas, roll, pitch, actual_fps, is_good_horizon)
+                    color = (0,0,255)          
+                draw_horizon(resized_frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
+                
+            # draw center circle
+            x = resized_frame.shape[1]//2
+            y = resized_frame.shape[0]//2
+            center = (x, y)
+            radius = resized_frame.shape[0]//72
+            cv2.circle(resized_frame, center, radius, flt_mode_color, 2)
 
-                # stack the frames
-                stacked = cv2.vconcat([stats_canvas, resized_diagnostic_mask, surface_canvas])
-                frame = cv2.hconcat([resized_frame, stacked])
+            # resize the diagnostic mask
+            desired_width = output_res[0] - resized_frame.shape[1]
+            scale_factor = desired_width / diagnostic_mask.shape[1]
+            desired_height = int(np.round(diagnostic_mask.shape[0] * scale_factor))
+            desired_dimensions = (desired_width, desired_height)
+            resized_diagnostic_mask = cv2.resize(diagnostic_mask, desired_dimensions)
+
+            # stats canvas
+            width = resized_diagnostic_mask.shape[1]
+            height = (output_res[1] - resized_diagnostic_mask.shape[0]) // 2
+            stats_canvas = np.zeros((height, width, 3), dtype = "uint8")
+            stats_canvas.fill(210)
+
+            # servo visualization canvas
+            surface_canvas = stats_canvas.copy()
+
+            # draw border lines
+            border_elements = [stats_canvas, resized_diagnostic_mask, surface_canvas]
+            for element in border_elements:
+                points = [(0,0),(element.shape[1],0),(element.shape[1],element.shape[0]),(0,element.shape[1])]
+                for idx, pt in enumerate(points):
+                    next_idx = idx + 1
+                    if next_idx >= len(points):
+                        pt2 = points[0]
+                    else:
+                        pt2 = points[next_idx]
+                    cv2.line(element, pt, pt2, BLUE, 3)
+            
+            # draw control surfaces and other elements of the HUD
+            draw_hud(stats_canvas, roll, pitch, actual_fps, is_good_horizon)
+            draw_surfaces(surface_canvas, .1, .9, .35, .65, ail_val, elev_val, flt_mode_color)
+            if flt_mode == 2:
+                text = 'Autopilot'
+                cv2.putText(surface_canvas, text,(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,flt_mode_color,1,cv2.LINE_AA)
+            elif flt_mode == 0:
+                text = 'Manual Flight'
+                cv2.putText(surface_canvas, text,(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,flt_mode_color,1,cv2.LINE_AA)
+
+            # stack the frames
+            stacked = cv2.vconcat([stats_canvas, resized_diagnostic_mask, surface_canvas])
+            frame = cv2.hconcat([resized_frame, stacked])
 
             # send the frame to the queue to be recorded
             writer.write(frame)
