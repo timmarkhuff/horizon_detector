@@ -41,8 +41,6 @@ class CustomVideoCapture:
         self.cap.set(3,self.resolution[0])
         self.cap.set(4,self.resolution[1])
 
-        print(f'resolution: {self.resolution}')
-
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
 
@@ -89,7 +87,6 @@ class CustomVideoCapture:
 
     def start_stream(self):
         self.run = True
-        print(f'using_camera: {self.using_camera}')
         if self.using_camera:
             Thread(target=self.get_frames_from_camera).start()
         else:

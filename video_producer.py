@@ -68,13 +68,11 @@ def main(output_res=(1280,720)):
 
         # extract some values from the metadata
         fps = datadict['metadata']['fps']
-        resolution_str = datadict['metadata']['resolution']
-        inf_resolution_str = datadict['metadata']['inference_resolution']
+        resolution = datadict['metadata']['resolution']
+        inf_resolution = datadict['metadata']['inference_resolution']
         exclusion_thresh = datadict['metadata']['exclusion_thresh']
         acceptable_variance = datadict['metadata']['acceptable_variance']
         fov = datadict['metadata']['fov']
-        resolution = tuple(map(int, resolution_str.split('x')))
-        inf_resolution = tuple(map(int, inf_resolution_str.split('x')))
 
         # define video_capture
         source = f'{recordings_path}/{video_name}.{video_extension}'

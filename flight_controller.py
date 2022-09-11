@@ -1,5 +1,4 @@
 # # libraries
-import os
 import numpy as np
 from simple_pid import PID
 import random
@@ -44,6 +43,7 @@ class Wind:
 
 class FlightController:
     def __init__(self, ail_handler, elev_handler, fps):
+        from main import settings
         self.ail_handler = ail_handler
         self.elev_handler = elev_handler
         self.fps = fps
@@ -70,13 +70,17 @@ class FlightController:
         self.ail_val = 0
         self.elev_val = 0
         
-        # Initialize PID parameters
-        self.ail_kp = -.01
+        # initialize PID parameters
+        self.ail_kp = settings.get_value('ail_kp')
         self.ail_ki = 0
         self.ail_kd = 0
-        self.elev_kp = -.025
+        self.elev_kp = settings.get_value('elev_kp')
         self.elev_ki = 0
         self.elev_kd = 0
+
+        # initialize trim
+        self.ail_trim = settings.get_value('ail_trim')
+        self.elev_trim = settings.get_value('elev_trim')
 
     def run(self, roll, pitch, is_good_horizon):
         """

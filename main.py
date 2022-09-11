@@ -4,7 +4,6 @@ import os
 import shutil
 import platform
 import numpy as np
-from argparse import ArgumentParser
 import json
 from time import sleep
 from timeit import default_timer as timer
@@ -19,42 +18,71 @@ from find_horizon import HorizonDetector
 from draw_display import draw_horizon, draw_hud, draw_roi
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
 from flight_controller import FlightController
+from config import Settings
 
 def main():
-    print('----------STARTING HORIZON DETECTOR----------')    
-    # parse arguments
-    parser = ArgumentParser()
-    help_text = 'The path to the video. For webcam, enter the index of the webcam you want to use, e.g. 0 '
-    parser.add_argument('--source', help=help_text, default='0', type=str)     
-    help_text = 'Default resolution used when streaming from camera. Not used when streaming from video file. '\
-                   'Options include: 640x480, 1280x720 and 1920x1080.'
-    parser.add_argument('--res', help=help_text, default='640x480', type=str)
-    help_text = 'Resolution of image upon which inferences will be peformed. Smaller size means faster inferences. '\
-                    'Cannot be wider than resolution of input image.'
-    parser.add_argument('--inf_res', help=help_text, default='100x100', type=str)     
-    help_text = 'Maximum FPS at which inferences will be performed. Actual FPS may be lower if inferences are too slow.'
-    parser.add_argument('--fps', help=help_text, default=30, type=int) 
-    args = parser.parse_args()
+    print('----------STARTING HORIZON DETECTOR----------')
 
+    # load settings from txt
+    path = 'settings.txt'
+    settings_dict = {
+        'ail_trim': 0,
+        'elev_trim': 0,
+        'ail_kp': .01,
+        'elev_kp': .025,
+        'servos_reversed': 0,
+        'source': '0',
+        'fps': 30,
+        'inference_resolution': '(100,100)',
+        'resolution': '(640,480)',
+        'acceptable_variance': 1.3,
+        'exclusion_thresh': 4,       
+        # FOV constant for Raspberry Pi Camera v2
+        # for more info: https://www.raspberrypi.com/documentation/accessories/camera.html
+        'fov': 48.8       
+    }
+
+    dtype_dict = {
+        'ail_trim': float,
+        'elev_trim': float,
+        'ail_kp': float,
+        'elev_kp': float,
+        'servos_reversed': bool,
+        'source': str,
+        'fps': int,
+        'inference_resolution': eval,
+        'resolution': eval,
+        'acceptable_variance': float,
+        'exclusion_thresh': float,
+        'fov': float
+    }
+
+    settings = Settings(path, settings_dict, dtype_dict)
+    ret = settings.read()
+    if not ret:
+        print('Failed to read settings. Terminating program.')
+        return
+    
     # General Constants
     # the video source, either a webcam (by index) or a video file (by file path)
-    SOURCE = args.source
-    RESOLUTION_STR = args.res
-    RESOLUTION = tuple(map(int, RESOLUTION_STR.split('x')))
-    INFERENCE_RESOLUTION_STR = args.inf_res
-    INFERENCE_RESOLUTION = tuple(map(int, INFERENCE_RESOLUTION_STR.split('x')))
-    FPS = args.fps
-    # percentage of the image height that is considered an acceptable variance,
-    # for the find_horizon function
-    ACCEPTABLE_VARIANCE = 1.3 
+    SOURCE = settings.get_value('source')
+    RESOLUTION = settings.get_value('resolution')
+    INFERENCE_RESOLUTION = settings.get_value('inference_resolution')
+    FPS = settings.get_value('fps')
+    # ACCEPTABLE_VARIANCE is percentage of the image height that is considered an acceptable variance
+    # for the find_horizon function.
+    ACCEPTABLE_VARIANCE = settings.get_value('acceptable_variance')
+    # EXCLUSION_THRESH is the angle above and below the previous horizon beyond which  
+    # contour points will be filtered out.
+    EXCLUSION_THRESH = settings.get_value('exclusion_thresh')
+    FOV = settings.get_value('fov')
     OPERATING_SYSTEM = platform.system()
 
-    # Validate INFERENCE_RESOLUTION
+    # Validate inference_resolution
     # check if the inference resolution is too tall
     if INFERENCE_RESOLUTION[1] > RESOLUTION[1]:
         print(f'Specified inference resolution of {INFERENCE_RESOLUTION} is '\
             f' taller than the resolution of {RESOLUTION}. This is not allowed.')
-        INFERENCE_RESOLUTION_STR = "100x100" # the recommend inference resolution
         INFERENCE_RESOLUTION = (100, 100) # the recommend inference resolution
         print(f'Inference resolution has been adjusted to the recommended '\
             f'resolution of {INFERENCE_RESOLUTION}.')
@@ -69,14 +97,11 @@ def main():
         INFERENCE_RESOLUTION = (inference_width, inference_height)
         print(f'The inference resolution has been adjusted to: {INFERENCE_RESOLUTION}')
 
-    # FOV constant for Raspberry Pi Camera v2
-    # source: https://www.raspberrypi.com/documentation/accessories/camera.html
-    FOV = 48.8
-    
     # global variables
     actual_fps = 0
-    horizon_detection = True
     if OPERATING_SYSTEM == 'Linux':
+        # For performance reasons, default to not rending the HUD when
+        # running on Raspberry Pi.
         render_image = False
     else:
         render_image = True
@@ -88,16 +113,21 @@ def main():
         """
         # pack up values into dictionary
         metadata['datetime'] = dt_string
-        metadata['resolution'] = RESOLUTION_STR
-        metadata['inference_resolution'] = INFERENCE_RESOLUTION_STR
+        metadata['ail_trim'] = settings.get_value('ail_trim')
+        metadata['elev_trim'] = settings.get_value('elev_trim')
+        metadata['ail_kp'] = settings.get_value('ail_kp')
+        metadata['elev_kp'] = settings.get_value('elev_kp')
+        metadata['servos_reversed'] = settings.get_value('servos_reversed')
         metadata['fps'] = FPS
-        metadata['exclusion_thresh'] = EXCLUSION_THRESH
+        metadata['inference_resolution'] = INFERENCE_RESOLUTION
+        metadata['resolution'] = RESOLUTION
         metadata['acceptable_variance'] = ACCEPTABLE_VARIANCE
+        metadata['exclusion_thresh'] = EXCLUSION_THRESH
         metadata['fov'] = FOV
 
         # wait for video_writer to finish recording      
         while video_writer.run:
-            sleep(.1) 
+            sleep(.01) 
 
         # save the json file
         print('Saving diagnostic data...')
@@ -121,19 +151,16 @@ def main():
         for file in os.listdir(src_folder):
                 shutil.copy(f'{src_folder}/{file}', dst)
         
-
     # paused frame displayed when real-time display is not active
     paused_frame = np.zeros((500, 500, 1), dtype = "uint8")
     cv2.putText(paused_frame, 'Real-time display is paused.',(20,30),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
     cv2.putText(paused_frame, "Press 'd' to enable real-time display.",(20,60),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
     cv2.putText(paused_frame, "Press 'r' to record.",(20,90),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
-    cv2.putText(paused_frame, "Press 'h' to toggle horizon detection.",(20,120),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
-    cv2.putText(paused_frame, "Press 'a' to toggle autopilot.",(20,150),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
-    cv2.putText(paused_frame, "Press 'q' to quit.",(20,180),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
+    cv2.putText(paused_frame, "Press 'q' to quit.",(20,120),cv2.FONT_HERSHEY_COMPLEX_SMALL,.75,(255,255,255),1,cv2.LINE_AA)
     cv2.imshow("Real-time Display", paused_frame)
 
     # define VideoCapture
-    video_capture = CustomVideoCapture(RESOLUTION, source=SOURCE)
+    video_capture = CustomVideoCapture(RESOLUTION, SOURCE)
 
     # start VideoStreamer
     video_capture.start_stream()
@@ -142,18 +169,13 @@ def main():
     # get some parameters for cropping and scaling
     crop_and_scale_parameters = get_cropping_and_scaling_parameters(video_capture.resolution, INFERENCE_RESOLUTION)
     
-    # EXCLUSION_THRESH is the angle above and below the previous horizon beyond which  
-    # contour points will be filtered out.
-    EXCLUSION_THRESH = 4
-
     # define the HorizonDetector
     horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION)
     
     # initialize some values related to the flight controller
     recording_switch_new_position = None
     autopilot_switch_new_position = None
-    ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode = None, None, None, None, None
-    pitch_trim = 0
+    ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode, pitch_trim = 0, 0, 0, 0, 0, 0
     
     # perform some start-up operations specific to the Raspberry Pi
     if OPERATING_SYSTEM == "Linux":
@@ -168,16 +190,15 @@ def main():
         autopilot_switch = TransmitterSwitch(6, 2)
             
         # servo handlers
-        ail_handler = ServoHandler(13, 12, FPS, 990, 2013) # , .1, 30)
-        elev_handler = ServoHandler(18, 27, FPS, 990, 2013) # , .1, 30)
+        ail_handler = ServoHandler(13, 12, FPS, 990, 2013)
+        elev_handler = ServoHandler(18, 27, FPS, 990, 2013)
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)
         
         # pitch trim reader
-        pitch_trim_reader = TrimReader(input_pin=25)
+        pitch_trim_reader = TrimReader(25)
         
-          
     # initialize variables for main loop
     t1 = timer() # for measuring frame rate
     n = 0 # frame number
@@ -185,13 +206,12 @@ def main():
         # get a frame from the webcam or video
         frame = video_capture.read_frame()
 
-        if horizon_detection:
-            # crop and scale the image
-            scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
+        # crop and scale the image
+        scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
 
-            # find the horizon
-            output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=render_image)
-            roll, pitch, variance, is_good_horizon, diagnostic_mask = output
+        # find the horizon
+        output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=render_image)
+        roll, pitch, variance, is_good_horizon, _ = output
             
         # run the flight controller
         if OPERATING_SYSTEM == "Linux":
@@ -203,7 +223,7 @@ def main():
             flt_mode = flt_ctrl.program_id  
 
         # save the horizon data for diagnostic purposes
-        if horizon_detection and gv.recording:
+        if gv.recording:
             # determine the number of the frame within the current recording
             recording_frame_num = next(recording_frame_iter)
 
@@ -277,18 +297,10 @@ def main():
             cv2.imshow("Real-time Display", paused_frame)
             render_image = not render_image
             print(f'Real-time display: {render_image}')
-        elif key == ord('h'):
-            if gv.recording:
-                print('Cannot toggle horizon detection while recording.')
-            else:
-                horizon_detection = not horizon_detection
-                print(f'Horizon detection: {horizon_detection}')
-        elif (key == ord('a') or autopilot_switch_new_position == 1) and flt_ctrl.program_id != 2:
+        elif autopilot_switch_new_position == 1 and flt_ctrl.program_id != 2:
             flt_ctrl.select_program(2)
-            print('Auto-pilot on.')
-        elif (key == ord('a') or autopilot_switch_new_position == 0) and flt_ctrl.program_id == 2:
+        elif autopilot_switch_new_position == 0 and flt_ctrl.program_id == 2:
             flt_ctrl.select_program(0)
-            print('Auto-pilot off.')
         elif (key == ord('r') or recording_switch_new_position == 1) and not gv.recording:
             # toggle the recording flag
             gv.recording = not gv.recording
@@ -310,7 +322,7 @@ def main():
             # create some dictionaries to save the diagnostic data
             datadict = {} # top-level dictionary that contains all diagnostic data
             metadata = {} # metadata for the recording (resolution, fps, datetime, etc.)
-            frames = {} 
+            frames = {} # contains data for each frame of the recording
             datadict['metadata'] = metadata
             datadict['frames'] = frames
             
@@ -323,8 +335,7 @@ def main():
             gv.recording = not gv.recording
             
             # finish the recording, save diagnostic about recording
-            if horizon_detection:
-                finish_recording()
+            finish_recording()
             
             # wiggle servos to confirm completion of recording
             if OPERATING_SYSTEM == 'Linux':
@@ -350,14 +361,13 @@ def main():
     
     # CLEAN UP AND FINISH PROGRAM
     # Stop the recording if it hasn't already been stopped. 
-    if gv.recording and horizon_detection:
+    if gv.recording:
         gv.recording = not gv.recording
         finish_recording()
     video_capture.release()
     cv2.destroyAllWindows()
     gv.recording = False
     gv.run = False
-    sleep(1) 
     print('---------------------END---------------------')
 
 if __name__ == '__main__':
