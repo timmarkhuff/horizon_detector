@@ -168,8 +168,8 @@ def main():
         autopilot_switch = TransmitterSwitch(6, 2)
             
         # servo handlers
-        ail_handler = ServoHandler(13, 12, FPS) # , .1, 30)
-        elev_handler = ServoHandler(18, 27, FPS) # , .1, 30)
+        ail_handler = ServoHandler(13, 12, FPS, 990, 2013) # , .1, 30)
+        elev_handler = ServoHandler(18, 27, FPS, 990, 2013) # , .1, 30)
         
         # flight controller
         flt_ctrl = FlightController(ail_handler, elev_handler, FPS)

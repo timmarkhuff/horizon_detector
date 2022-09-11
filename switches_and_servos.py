@@ -84,7 +84,7 @@ class TransmitterControl:
         self._cb.cancel()
 
 class TransmitterSwitch(TransmitterControl):
-    def __init__(self, input_pin, positions: int, weighting=0.0):
+    def __init__(self, input_pin: int, positions: int, weighting=0.0):
         """        
         positions: the number of positions that the switch has (usually 2 or 3)
         """
@@ -92,8 +92,8 @@ class TransmitterSwitch(TransmitterControl):
         self.positions = positions
         
         # determine the thresholds for the button positions
-        pwm_min = 860 # originally 988 for 2 positions switches
-        pwm_max = 2140 # originally 2010 for 2 positions switches
+        pwm_min = 988 # Aeroscout 988, Guinea Pig 860
+        pwm_max = 2010 # Aeroscout 2010, Guinea Pig 2140
         increment = (pwm_max - pwm_min) / self.positions
         thresh = pwm_min
         self.position_thresholds = []
@@ -143,16 +143,16 @@ class TransmitterSwitch(TransmitterControl):
         return new_position
     
 class ServoHandler(TransmitterControl):
-    def __init__(self, input_pin, output_pin, fps, smoothing_dur=0, increments=None, weighting=0.0):
+    def __init__(self, input_pin, output_pin, fps, min_pw, max_pw, smoothing_dur=0, increments=None, weighting=0.0):
         """
         smoothing_dur: the duration (in seconds) of servo reading smoothing.
         increments: the number of discrete increments to which the servo can be moved.
         """
         super().__init__(input_pin, weighting=0.0)
         
-        self.min_duty = 7.3 # 3.84
-        self.max_duty = 12.9 # 9.76
-        self.duty_range = self.max_duty - self.min_duty
+        self.min_pw = min_pw 
+        self.max_pw = max_pw 
+        self.pw_range = self.max_pw - self.min_pw
         
         # define servo
         factory = PiGPIOFactory()
@@ -177,13 +177,13 @@ class ServoHandler(TransmitterControl):
             self.incremental_movement = False
 
                 
-    def duty_to_servo_value(self, duty) -> float:
-        if duty < self.min_duty:
+    def pw_to_servo_value(self, pw) -> float:
+        if pw < self.min_pw:
             servo_value = -1
-        elif duty > self.max_duty:
+        elif pw > self.max_pw:
             servo_value = 1
         else:
-            servo_value = (duty - self.min_duty) / self.duty_range
+            servo_value = (pw - self.min_pw) / self.pw_range
             servo_value = (servo_value - .5) * 2
         
         return servo_value
@@ -203,9 +203,8 @@ class ServoHandler(TransmitterControl):
         return servo_value
         
     def read(self):       
-        servo_duty = self.get_duty_cycle()
-        servo_value = self.duty_to_servo_value(servo_duty)
-        # print(f'{servo_duty} | {servo_value}')
+        pw = self.get_pulse_width()
+        servo_value = self.pw_to_servo_value(pw)
         
         # optional smoothing
         if self.smoothing:
@@ -216,7 +215,7 @@ class ServoHandler(TransmitterControl):
         return servo_value
     
 class TrimReader(TransmitterControl):
-    def __init__(self, input_pin, pwm_min=1094, pwm_max=1926, max_trim=5, weighting=0.0):
+    def __init__(self, input_pin, pwm_min=990, pwm_max=2013, max_trim=5, weighting=0.0):
 
         super().__init__(input_pin, weighting=0.0)
         
