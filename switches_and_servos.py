@@ -196,6 +196,12 @@ class ServoHandler(TransmitterControl):
             else:
                 self.previous_actuated_value = servo_value
                 
+        # Ensure that value is within the acceptable range of -1 to 1
+        if servo_value > 1:
+            servo_value = 1
+        elif servo_value < -1:
+            servo_value = 1
+                
         # actuate servo
         self.servo.value = servo_value
         

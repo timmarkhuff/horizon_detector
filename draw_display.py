@@ -187,7 +187,7 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
         return
 
     # draw elevator
-    elev_deflection = -1 * int(np.round(elev_val * full_defection))
+    elev_deflection = int(np.round(elev_val * full_defection))
     pt1x = left + plane_width//2 - hor_stab_width//2 + elev_offset
     pt1y = top + plane_height - hor_stab_height - elev_deflection
     pt1 = (pt1x , pt1y)
@@ -198,7 +198,7 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
 
     # draw ailerons
     # left
-    ail_deflection = -1 * int(np.round(ail_val * full_defection))
+    ail_deflection = int(np.round(ail_val * full_defection))
     pt1 = (left + ail_offset, bottom)
     pt2 = (left + ail_offset + ail_width, bottom - ail_deflection)
     cv2.rectangle(frame, pt1, pt2, surface_color, -1)

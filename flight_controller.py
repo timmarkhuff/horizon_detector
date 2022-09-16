@@ -3,6 +3,7 @@ import numpy as np
 from simple_pid import PID
 import random
 from timeit import default_timer as timer
+from global_variables import settings
 
 FULL_ROTATION = 360
 SEPARATOR = '-----------------'
@@ -43,25 +44,22 @@ class Wind:
 
 class FlightController:
     def __init__(self, ail_handler, elev_handler, fps):
-        from main import settings
         self.ail_handler = ail_handler
         self.elev_handler = elev_handler
         self.fps = fps
 
         # constants
-        self.INTERRUPTABLE_PROGRAMS = [1, 3]
         self.INTERRUPT_THRESH = .25
 
         # set the default flight program
         self.select_program(1)
 
-        # keep track of recent detection scores for n second(s)
+        # Keep track of recent detection scores for n second(s)
+        # This will be used to determine if the program has lost sight of the horizon for
+        # a sufficiently long duration and should return control surfaces to a neutral state.
         n = .25 # seconds
         number_of_frames_to_remember = int(np.round(n * fps))
         self.horizon_detection_list = [0 for n in range(number_of_frames_to_remember)]
-        
-        self.ail_val = 0
-        self.elev_val = 0
         
         # initialize some values
         self.roll = 0
@@ -79,8 +77,12 @@ class FlightController:
         self.elev_kd = 0
 
         # initialize trim
-        self.ail_trim = settings.get_value('ail_trim')
-        self.elev_trim = settings.get_value('elev_trim')
+        self.ail_trim = 0
+        self.elev_trim = 0
+        
+        # Handle servo direction (not yet implemented)
+        # Might be necessary for planes other than the AeroScout.
+        self.servos_reversed = settings.get_value('servos_reversed')
 
     def run(self, roll, pitch, is_good_horizon):
         """
@@ -116,24 +118,41 @@ class FlightController:
         # run the flight program
         stop = self.program.run()
 
-        # switch back to manual flight if the current program has ended
+        # Switch back to manual flight if the current program has ended.
         if stop:
             self.select_program(0)
         
+#         # check for user interruption
+#         if self.program.is_interruptable:                
+#             if abs(self.ail_stick_val) > self.INTERRUPT_THRESH or \
+#                abs(self.elev_stick_val) > self.INTERRUPT_THRESH:
+#                 print(SEPARATOR)
+#                 print('User input detected.')
+#                 print(f'Elevator stick value: {self.elev_stick_val} Aileron stick value: {self.ail_stick_val}')
+#                 print('Terminating program')
+#                 # return to manual control
+#                 self.select_program(0)
+                
         # check for user interruption
-        if self.program_id in self.INTERRUPTABLE_PROGRAMS:                
-            if abs(self.ail_stick_val) > self.INTERRUPT_THRESH or \
-               abs(self.elev_stick_val) > self.INTERRUPT_THRESH:
+        if self.program.is_interruptable:                
+            if abs(self.ail_stick_val - self.ail_trim) > self.INTERRUPT_THRESH or \
+               abs(self.elev_stick_val - self.elev_trim) > self.INTERRUPT_THRESH:
                 print(SEPARATOR)
                 print('User input detected.')
                 print(f'Elevator stick value: {self.elev_stick_val} Aileron stick value: {self.ail_stick_val}')
                 print('Terminating program')
                 # return to manual control
                 self.select_program(0)
-
+                
+        # Handle reversed_servos
+        # Need to test this on planes other than the AeroScout
+        if self.servos_reversed:
+            self.ail_val *= -1
+            self.elev_val *= -1
+            
         # actuate the servos
-        self.ail_val = self.ail_handler.actuate(self.ail_val)
-        self.elev_val = self.elev_handler.actuate(self.elev_val)
+        self.ail_handler.actuate(self.ail_val)
+        self.elev_handler.actuate(self.elev_val)
 
         return self.ail_stick_val, self.elev_stick_val, self.ail_val, self.elev_val
 
@@ -180,6 +199,7 @@ class FlightProgram:
         self.flt_ctrl = flt_ctrl
         self.flt_ctrl.program = self
         self.stop = False
+        self.is_interruptable = False
 
 class ManualFlight(FlightProgram):
     def __init__(self, flt_ctrl):
@@ -203,6 +223,7 @@ class SurfaceCheck(FlightProgram):
         Automatic surface check for preflight check.
         """
         super().__init__(flt_ctrl)
+        self.is_interruptable = True
 
         # initialize the control surfaces in netural positions
         self.flt_ctrl.ail_val = .01
@@ -267,8 +288,24 @@ class LevelFlight(FlightProgram):
         self.elev_pid = PID(p, i, d, setpoint=0) 
         self.elev_pid.sample_time = 1 / self.flt_ctrl.fps 
         self.elev_pid.output_limits = (-.3, .3)
+        
+        # initialize values for trim
+        self.trimmed = False
+        self.ail_stick_positions = []
+        self.elev_stick_positions = []
     
     def run(self):
+        # trim the plane
+        if not self.trimmed:
+            self.ail_stick_positions.append(self.flt_ctrl.ail_stick_val)
+            self.elev_stick_positions.append(self.flt_ctrl.elev_stick_val)
+            if len(self.ail_stick_positions) == self.flt_ctrl.fps:
+                self.trimmed = True
+                self.flt_ctrl.ail_trim = np.average(self.ail_stick_positions)
+                self.flt_ctrl.elev_trim = np.average(self.elev_stick_positions)
+                print(f'ail_trim: {self.flt_ctrl.ail_trim}')
+                print(f'elev_trim: {self.flt_ctrl.elev_trim}')
+        
         if self.flt_ctrl.is_good_horizon:
             # If the horizon is good, run the pid controller and accept the returned values.
             self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll + 20 * self.flt_ctrl.ail_stick_val)
@@ -282,8 +319,13 @@ class LevelFlight(FlightProgram):
             
         if not any(self.flt_ctrl.horizon_detection_list):
             # return to neutral position after a period of time
-            self.flt_ctrl.ail_val = 0 
+            self.flt_ctrl.ail_val = 0
             self.flt_ctrl.elev_val = 0
+            
+        # Adjust the surface values with trim
+        self.flt_ctrl.ail_val += self.flt_ctrl.ail_trim
+        self.flt_ctrl.elev_val += self.flt_ctrl.elev_trim
+            
         return False
     
 class QuickWiggle(FlightProgram):
@@ -292,6 +334,7 @@ class QuickWiggle(FlightProgram):
         Automatic surface check for preflight check.
         """
         super().__init__(flt_ctrl)
+        self.is_interruptable = True
        
         self.stop = False
         self.servo_value = .01

@@ -18,46 +18,12 @@ from find_horizon import HorizonDetector
 from draw_display import draw_horizon, draw_hud, draw_roi
 from disable_wifi_and_bluetooth import disable_wifi_and_bluetooth
 from flight_controller import FlightController
-from config import Settings
+from global_variables import settings
 
 def main():
     print('----------STARTING HORIZON DETECTOR----------')
 
     # load settings from txt
-    path = 'settings.txt'
-    settings_dict = {
-        'ail_trim': 0,
-        'elev_trim': 0,
-        'ail_kp': .01,
-        'elev_kp': .025,
-        'servos_reversed': 0,
-        'source': '0',
-        'fps': 30,
-        'inference_resolution': '(100,100)',
-        'resolution': '(640,480)',
-        'acceptable_variance': 1.3,
-        'exclusion_thresh': 4,       
-        # FOV constant for Raspberry Pi Camera v2
-        # for more info: https://www.raspberrypi.com/documentation/accessories/camera.html
-        'fov': 48.8       
-    }
-
-    dtype_dict = {
-        'ail_trim': float,
-        'elev_trim': float,
-        'ail_kp': float,
-        'elev_kp': float,
-        'servos_reversed': bool,
-        'source': str,
-        'fps': int,
-        'inference_resolution': eval,
-        'resolution': eval,
-        'acceptable_variance': float,
-        'exclusion_thresh': float,
-        'fov': float
-    }
-
-    settings = Settings(path, settings_dict, dtype_dict)
     ret = settings.read()
     if not ret:
         print('Failed to read settings. Terminating program.')
@@ -113,8 +79,6 @@ def main():
         """
         # pack up values into dictionary
         metadata['datetime'] = dt_string
-        metadata['ail_trim'] = settings.get_value('ail_trim')
-        metadata['elev_trim'] = settings.get_value('elev_trim')
         metadata['ail_kp'] = settings.get_value('ail_kp')
         metadata['elev_kp'] = settings.get_value('elev_kp')
         metadata['servos_reversed'] = settings.get_value('servos_reversed')
