@@ -1,9 +1,20 @@
+from turtle import width
 import cv2
 import numpy as np
 from math import cos, sin, pi, radians
 
 FULL_ROTATION = 360
 FULL_ROTATION_RADIANS = 2 * pi
+
+def _restrict(val, upper_bound:float=1, lower_bound:float=-1):
+    """
+    Restricts the provided value with the provided upper bound and lower bound
+    """
+    if val > upper_bound:
+        val = upper_bound
+    elif val < lower_bound:
+        val = lower_bound
+    return val
 
 def _find_points(m: float, b: float, frame_shape: tuple) -> list:
     """"
@@ -207,4 +218,83 @@ def draw_surfaces(frame, left: float, right: float, top: float, bottom: float,
     pt1 = (right - ail_offset, bottom)
     pt2 = (right - ail_offset - ail_width, bottom + ail_deflection)
     cv2.rectangle(frame, pt1, pt2, surface_color, -1)
+
+def draw_stick(frame, left: float, top: float, width: float, 
+                val1: float, val2: float, trim1: float, trim2: float, color: tuple):
+
+    # general variables
+    height = width
+    width_pixels = width * frame.shape[1]
+    height_pixels = width_pixels
+    left_pixels = left * frame.shape[1]
+    right_pixels = (left + width) * frame.shape[1]
+    top_pixels = top * frame.shape[0]
+
+    # draw outer circle
+    outer_circle_color = (80,80,80)
+    radius_pixels = (right_pixels - left_pixels)/2
+    center_x = left_pixels + radius_pixels
+    center_y = top_pixels + radius_pixels
+    center_rounded = (round(center_x), round(center_y))
+    cv2.circle(frame, center_rounded, round(radius_pixels), outer_circle_color, -1)
+
+    # draw crosslines
+    crossline_color = (245,245,245)
+    crossline_width = 1
+    # line 1
+    hor_offset_from_center = width_pixels * .4
+    pt1x = center_x - hor_offset_from_center
+    pt1y = center_y 
+    pt2x = center_x + hor_offset_from_center
+    pt2y = center_y
+    pt1 = (round(pt1x), round(pt1y))
+    pt2 = (round(pt2x), round(pt2y))
+    cv2.line(frame, pt1, pt2, crossline_color, crossline_width)
+
+    # line 2
+    vert_offset_from_center = height_pixels * .4
+    pt1x = center_x 
+    pt1y = center_y - vert_offset_from_center
+    pt2x = center_x 
+    pt2y = center_y + vert_offset_from_center
+    pt1 = (round(pt1x), round(pt1y))
+    pt2 = (round(pt2x), round(pt2y))
+    cv2.line(frame, pt1, pt2, crossline_color, crossline_width)
+
+    # draw inner rectangle
+    hor_offset_from_center = height_pixels * .3
+    vert_offset_from_center = height_pixels * .21
+    rectangle_color = (40,40,40)
+    pt1x = center_x - hor_offset_from_center
+    pt1y = center_y - vert_offset_from_center
+    pt2x = center_x + hor_offset_from_center
+    pt2y = center_y + vert_offset_from_center
+    rectangle_width = pt2x - pt1x
+    pt1 = (round(pt1x), round(pt1y))
+    pt2 = (round(pt2x), round(pt2y))
+    cv2.rectangle(frame, pt1, pt2, rectangle_color, -1)
+
+    # Restrict stick values within acceptable bounds (-1, 1)
+    val1 = _restrict(val1)
+    val2 = _restrict(val2)
+    trim1 = _restrict(trim1)
+    trim2 = _restrict(trim2)
+
+    # Draw stick
+    stick_color = (230,230,230)
+    stick_width = height_pixels * .12
+    pt1x = center_x
+    pt1y = center_y
+    pt2x = center_x + val1 * rectangle_width/2
+    pt2y = center_y + val2 * rectangle_width/2
+    pt1 = (round(pt1x), round(pt1y)) # base of stick
+    pt2 = (round(pt2x), round(pt2y)) # tip of stick
+    cv2.line(frame, pt1, pt2, stick_color, round(stick_width))
+
+    # Draw tip of stick
+    cv2.circle(frame, pt2, round(stick_width/2), outer_circle_color, -1)
+    cv2.circle(frame, pt2, round(stick_width/2), color, 2)
+
+
+
     

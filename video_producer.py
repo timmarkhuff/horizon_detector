@@ -6,7 +6,7 @@ import json
 from timeit import default_timer as timer
 
 # my libraries
-from draw_display import draw_horizon, draw_surfaces, draw_hud, draw_roi
+from draw_display import draw_horizon, draw_surfaces, draw_hud, draw_roi, draw_stick
 from crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
 from find_horizon import HorizonDetector
 
@@ -106,7 +106,11 @@ def main(output_res=(1280,720)):
             elev_val = datadict['frames'][dict_key]['elev_val']
             flt_mode = datadict['frames'][dict_key]['flt_mode']
             pitch_trim = datadict['frames'][dict_key]['pitch_trim']
+            ail_stick_val = datadict['frames'][dict_key]['ail_stick_val']
+            elev_stick_val = datadict['frames'][dict_key]['elev_stick_val']
 
+            # Reverse some values if necessary
+            ail_stick_val = -1 * ail_stick_val
 
             scaled_and_cropped_frame = crop_and_scale(frame, **crop_and_scale_parameters)
             output = horizon_detector.find_horizon(scaled_and_cropped_frame, diagnostic_mode=True)
@@ -128,11 +132,6 @@ def main(output_res=(1280,720)):
             desired_dimensions = (desired_width, desired_height)
             resized_frame = cv2.resize(frame, desired_dimensions)
             
-            # draw pitch trim location
-            if is_good_horizon:
-                color = (255,255,255)
-                draw_horizon(resized_frame, roll, pitch + pitch_trim, fov, color, draw_groundline=False)
-            
             # draw the horizon
             if roll != 'null':  
                 if is_good_horizon:
@@ -141,6 +140,10 @@ def main(output_res=(1280,720)):
                     color = (0,0,255)          
                 draw_horizon(resized_frame, roll, pitch, fov, color, draw_groundline=is_good_horizon)
                 
+            # draw pitch trim location
+            if is_good_horizon and flt_mode == 2:
+                draw_horizon(resized_frame, roll, pitch + pitch_trim, fov, flt_mode_color, draw_groundline=False)
+
             # draw center circle
             x = resized_frame.shape[1]//2
             y = resized_frame.shape[0]//2
@@ -179,6 +182,10 @@ def main(output_res=(1280,720)):
             # draw control surfaces and other elements of the HUD
             draw_hud(stats_canvas, roll, pitch, actual_fps, is_good_horizon)
             draw_surfaces(surface_canvas, .1, .9, .35, .65, ail_val, elev_val, flt_mode_color)
+            draw_stick(surface_canvas, left=.75, top=.075, width=.2,
+                        val1=ail_stick_val, val2=elev_stick_val, trim1=0, trim2=0, color=flt_mode_color)
+
+            # draw flight mode indication
             if flt_mode == 2:
                 text = 'Autopilot'
                 cv2.putText(surface_canvas, text,(20,40),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,flt_mode_color,1,cv2.LINE_AA)
