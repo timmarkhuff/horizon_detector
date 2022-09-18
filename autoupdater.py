@@ -17,7 +17,7 @@ def update(update_path):
     # check if the file is a python file
     updated_files = 0
     for i in os.listdir(update_path):
-        if i[-3:] != '.py':
+        if i.split('.')[-1] not in ['py', 'txt']:
             continue
         
         # do not update the autoupdater file
@@ -45,7 +45,7 @@ def update(update_path):
         
     print(f'{updated_files} files updated.')
     if updated_files > 0:
-        ail_handler = ServoHandler(13, 12, 30)
+        ail_handler = ServoHandler(13, 12, 30, 990, 2013)
         for n in range(updated_files):
             sleep(.5)
             ail_handler.actuate(.5)

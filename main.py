@@ -1,3 +1,4 @@
+# testing 3...
 # standard libraries
 import cv2
 import os
@@ -81,6 +82,7 @@ def main():
         metadata['datetime'] = dt_string
         metadata['ail_kp'] = settings.get_value('ail_kp')
         metadata['elev_kp'] = settings.get_value('elev_kp')
+        metadata['max_deflection'] = settings.get_value('max_deflection')
         metadata['servos_reversed'] = settings.get_value('servos_reversed')
         metadata['fps'] = FPS
         metadata['inference_resolution'] = INFERENCE_RESOLUTION
@@ -183,7 +185,7 @@ def main():
                 adjusted_pitch = pitch + pitch_trim
             else:
                 adjusted_pitch = None
-            ail_stick_val, elev_stick_val, ail_val, elev_val = flt_ctrl.run(roll, adjusted_pitch, is_good_horizon)
+            ail_stick_val, elev_stick_val, ail_val, elev_val, ail_trim, elev_trim = flt_ctrl.run(roll, adjusted_pitch, is_good_horizon)
             flt_mode = flt_ctrl.program_id  
 
         # save the horizon data for diagnostic purposes
@@ -202,6 +204,8 @@ def main():
             frame_data['elev_val'] = elev_val
             frame_data['ail_stick_val'] = ail_stick_val
             frame_data['elev_stick_val'] = elev_stick_val
+            frame_data['ail_trim'] = ail_trim
+            frame_data['elev_trim'] = elev_trim
             frame_data['flt_mode'] = flt_mode
             frame_data['pitch_trim'] = pitch_trim 
             frames[recording_frame_num] = frame_data

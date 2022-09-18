@@ -7,6 +7,7 @@ path = 'settings.txt'
 settings_dict = {
     'ail_kp': .01,
     'elev_kp': .025,
+    'max_deflection': .4,
     'servos_reversed': 0,
     'source': '0',
     'fps': 30,
@@ -22,6 +23,7 @@ settings_dict = {
 dtype_dict = {
     'ail_kp': float,
     'elev_kp': float,
+    'max_deflection': float,
     'servos_reversed': int,
     'source': str,
     'fps': int,

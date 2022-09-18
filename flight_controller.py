@@ -68,6 +68,9 @@ class FlightController:
         self.ail_val = 0
         self.elev_val = 0
         
+        # Max deflection of control surfaces
+        self.max_deflection = settings.get_value('max_deflection')
+        
         # initialize PID parameters
         self.ail_kp = settings.get_value('ail_kp')
         self.ail_ki = 0
@@ -121,17 +124,6 @@ class FlightController:
         # Switch back to manual flight if the current program has ended.
         if stop:
             self.select_program(0)
-        
-#         # check for user interruption
-#         if self.program.is_interruptable:                
-#             if abs(self.ail_stick_val) > self.INTERRUPT_THRESH or \
-#                abs(self.elev_stick_val) > self.INTERRUPT_THRESH:
-#                 print(SEPARATOR)
-#                 print('User input detected.')
-#                 print(f'Elevator stick value: {self.elev_stick_val} Aileron stick value: {self.ail_stick_val}')
-#                 print('Terminating program')
-#                 # return to manual control
-#                 self.select_program(0)
                 
         # check for user interruption
         if self.program.is_interruptable:                
@@ -154,7 +146,7 @@ class FlightController:
         self.ail_handler.actuate(self.ail_val)
         self.elev_handler.actuate(self.elev_val)
 
-        return self.ail_stick_val, self.elev_stick_val, self.ail_val, self.elev_val
+        return self.ail_stick_val, self.elev_stick_val, self.ail_val, self.elev_val, self.ail_trim, self.elev_trim
 
     def select_program(self, program_id):
         self.program = FlightProgram.__subclasses__()[program_id](self)
@@ -279,7 +271,7 @@ class LevelFlight(FlightProgram):
         i = self.flt_ctrl.ail_ki
         d = self.flt_ctrl.ail_kd
         self.ail_pid = PID(p, i, d, setpoint=0) 
-        self.ail_pid.output_limits = (-.3, .3)
+        self.ail_pid.output_limits = (-1 * self.flt_ctrl.max_deflection, self.flt_ctrl.max_deflection)
         self.ail_pid.sample_time = 1 / self.flt_ctrl.fps
         # elevator  PID controller
         p = self.flt_ctrl.elev_kp
@@ -287,7 +279,7 @@ class LevelFlight(FlightProgram):
         d = self.flt_ctrl.elev_kd
         self.elev_pid = PID(p, i, d, setpoint=0) 
         self.elev_pid.sample_time = 1 / self.flt_ctrl.fps 
-        self.elev_pid.output_limits = (-.3, .3)
+        self.elev_pid.output_limits = (-1 * self.flt_ctrl.max_deflection, self.flt_ctrl.max_deflection)
         
         # initialize values for trim
         self.trimmed = False
@@ -308,8 +300,8 @@ class LevelFlight(FlightProgram):
         
         if self.flt_ctrl.is_good_horizon:
             # If the horizon is good, run the pid controller and accept the returned values.
-            self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll + 20 * self.flt_ctrl.ail_stick_val)
-            self.flt_ctrl.elev_val = self.elev_pid(self.flt_ctrl.pitch + 10 * self.flt_ctrl.elev_stick_val)
+            self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll - 20 * self.flt_ctrl.ail_stick_val)
+            self.flt_ctrl.elev_val = self.elev_pid(self.flt_ctrl.pitch - 10 * self.flt_ctrl.elev_stick_val)
         else:
             # If the horizon is not good, run the PID controller with the previous roll and pitch values.
             # Do not accept the output of the PID controller.
