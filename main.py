@@ -141,7 +141,7 @@ def main():
     # initialize some values related to the flight controller
     recording_switch_new_position = None
     autopilot_switch_new_position = None
-    ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode, pitch_trim = 0, 0, 0, 0, 0, 0
+    ail_stick_val, elev_stick_val, ail_val, elev_val, flt_mode, pitch_trim, ail_trim, elev_trim = (0 for _ in range(8))
     
     # perform some start-up operations specific to the Raspberry Pi
     if OPERATING_SYSTEM == "Linux":
