@@ -104,7 +104,7 @@ def main():
         # check if the thumbdrive is attached
         thumbdrive = '/media/pi/scratch'
         if not os.path.exists(thumbdrive):
-            return
+            return # do nothing with the thumbdrive
         
         # check if the recordings folder exists on the thumbdrive
         # if not, create it

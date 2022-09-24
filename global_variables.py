@@ -5,8 +5,10 @@ recording = False
 
 path = 'settings.txt'
 settings_dict = {
-    'ail_kp': .01,
-    'elev_kp': .025,
+    'ail_kp': 0.015,
+    'elev_kp': 0.0375,
+    'easy_mode_limit_roll': 30,
+    'easy_mode_limit_pitch': 10,
     'max_deflection': .4,
     'servos_reversed': 0,
     'source': '0',
@@ -23,6 +25,8 @@ settings_dict = {
 dtype_dict = {
     'ail_kp': float,
     'elev_kp': float,
+    'easy_mode_limit_roll': int,
+    'easy_mode_limit_pitch': int,
     'max_deflection': float,
     'servos_reversed': int,
     'source': str,

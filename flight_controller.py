@@ -83,6 +83,11 @@ class FlightController:
         self.ail_trim = 0
         self.elev_trim = 0
         
+        # easy mode variables
+        self.easy_mode_limit_roll = settings.get_value('easy_mode_limit_roll')
+        self.easy_mode_limit_pitch = settings.get_value('easy_mode_limit_pitch')
+        self.easy_mode_active_zone = .5
+        
         # Handle servo direction (not yet implemented)
         # Might be necessary for planes other than the AeroScout.
         self.servos_reversed = settings.get_value('servos_reversed')
@@ -285,6 +290,8 @@ class LevelFlight(FlightProgram):
         self.trimmed = False
         self.ail_stick_positions = []
         self.elev_stick_positions = []
+        
+        # values for easy mode
     
     def run(self):
         # trim the plane
@@ -300,8 +307,11 @@ class LevelFlight(FlightProgram):
         
         if self.flt_ctrl.is_good_horizon:
             # If the horizon is good, run the pid controller and accept the returned values.
-            self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll - 20 * self.flt_ctrl.ail_stick_val)
-            self.flt_ctrl.elev_val = self.elev_pid(self.flt_ctrl.pitch - 10 * self.flt_ctrl.elev_stick_val)
+            easy_mode_target_roll = self.flt_ctrl.easy_mode_limit_roll * self.get_easy_mode_stick_value(self.flt_ctrl.ail_stick_val) / self.flt_ctrl.easy_mode_active_zone
+            self.flt_ctrl.ail_val = self.ail_pid(self.flt_ctrl.roll - easy_mode_target_roll)
+            easy_mode_target_pitch = self.flt_ctrl.easy_mode_limit_pitch * self.get_easy_mode_stick_value(self.flt_ctrl.elev_stick_val) / self.flt_ctrl.easy_mode_active_zone
+            self.flt_ctrl.elev_val = self.elev_pid(self.flt_ctrl.pitch - easy_mode_target_pitch)
+            
         else:
             # If the horizon is not good, run the PID controller with the previous roll and pitch values.
             # Do not accept the output of the PID controller.
@@ -319,6 +329,15 @@ class LevelFlight(FlightProgram):
         self.flt_ctrl.elev_val += self.flt_ctrl.elev_trim
             
         return False
+    
+    def get_easy_mode_stick_value(self, stick_value:float):
+        if stick_value > self.flt_ctrl.easy_mode_active_zone:
+            easy_mode_stick_value = self.flt_ctrl.easy_mode_active_zone
+        elif stick_value < -1 * self.flt_ctrl.easy_mode_active_zone:
+            easy_mode_stick_value = -1 * self.flt_ctrl.easy_mode_active_zone
+        else:
+            easy_mode_stick_value = stick_value
+        return easy_mode_stick_value
     
 class QuickWiggle(FlightProgram):
     def __init__(self, flt_ctrl):
