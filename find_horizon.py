@@ -288,8 +288,8 @@ class HorizonDetector:
     
     def _adjust_roll(self, roll: float, sky_is_up: bool) -> float:
         """
-        Adjusts the roll to be within the range of 0-2*pi.
-        Removes negative values and values greater than 2*pi.
+        Adjusts the roll to be within the range of 0-360 degrees.
+        Removes negative values and values greater than 360 degrees.
         """
         roll = abs(roll % FULL_ROTATION)
         in_sky_is_up_sector = (roll >= FULL_ROTATION * .75  or (roll > 0 and roll <= FULL_ROTATION * .25))
