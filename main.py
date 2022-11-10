@@ -1,4 +1,3 @@
-# testing 3...
 # standard libraries
 import cv2
 import os
