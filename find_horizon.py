@@ -32,10 +32,6 @@ class HorizonDetector:
         self.predicted_pitch = None
         self.recent_horizons = [None, None]
 
-        # create a blank diagnostic map to return in case one cannot be generated
-        # self.blank_diagnostic_mask = np.zeros((frame_shape[0], frame_shape[1], 3), dtype = "uint8")
-        # self.blank_diagnostic_mask = cv2.cvtColor(blank_diagnostic_mask, cv2.COLOR_GRAY2BGR)s
-
     def find_horizon(self, frame:np.ndarray, diagnostic_mode:bool=False):
         """
         frame: the image in which you want to find the horizon
