@@ -1,4 +1,4 @@
-from config import Settings
+from old.config import Settings
 
 run = True
 recording = False

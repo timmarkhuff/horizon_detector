@@ -1,0 +1,30 @@
+video:
+  fps: 30
+receiver:
+  channels:
+    primary:
+      ail: 1
+      ele: 2
+      thr: 3
+      rud: 4
+      rec: 5 # the recording switch
+      auto: 6 # autopilot
+    trim:
+      ail: 6
+      ele: 7
+      rud: 8
+  pwm:
+    min: 172
+    max: 1810 
+controls:
+  reversed:
+    ail: 0
+    ele: 0
+    rud: 0
+rpi:
+  input_pins:
+    sbus: 4
+  output_pins:
+    ail: 12
+    ele: 13
+    rud: 14

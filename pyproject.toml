@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "horizon-detector"
+version = "1.0.0"
+description = "Computer Vision flight controller software for Raspberry Pi"
+authors = ["Tim Huff <timmarkhuff@gmail.com>"]
+readme = "README.md"
+packages = [{include = "horizon_detector"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
