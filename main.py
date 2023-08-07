@@ -1,71 +1,66 @@
-import cv2
+import yaml
+from datetime import datetime
 import time
+from receiver import Receiver
 
-from horizon_detector.video import CameraCapture
+from utils.messages import Message
 
-ITERATIONS = 500
+# Read the configurations and convert to a Message object
+path = "configurations.yaml"
+with open(path, 'r') as f:
+    config = Message(yaml.safe_load(f))
 
-# cap = CameraCapture()
+LOOP_DURATION = 1 / config.video.fps
 
-# previous_frame = None
-# t1 = time.time()
-# for n in range(ITERATIONS):
-#     print(n)
-#     frame = cap.read()
+# Initialize the receiver
+receiver = Receiver(config.receiver)
+# TODO implement proper logging
+print('Connecting to receiver...')
+receiver.connect()
+print('Connected to receiver!')
 
-#     cv2.waitKey(1)
+# Initialize the flight controller
 
-# t2 = time.time()
-# print(f'Time elapsed: {t2-t1} seconds.')
-# print(f'FPS: {ITERATIONS/(t2-t1)}')
+# Initialize the camera
 
-# cap.release()
+t1 = time.time() # Initialize the FPS timer
+while True:
+    # Get the parsed SBUS packet (None -> ParsedPacket)
+    packet = receiver.get_parsed_packet()
+    print(packet)
 
-# cv2.imwrite('test.jpg', frame)
+    # Get a frame from the camera (None -> frame)
 
-# ITERATIONS = 1000
-# cap = cv2.VideoCapture(0)
+    # Perform horizon detection (frame -> Attitude/Horizon)
 
-# t1 = time.time()
-# for n in range(ITERATIONS):
-#     ret, frame = cap.read()
-#     # cv2.waitKey(1)
-# t2 = time.time()
-# print(frame.shape)
-# print(f'Time elapsed: {t2-t1} seconds.')
-# print(f'FPS: {ITERATIONS/(t2-t1)}')
+    # Run flight_controller (SensorMesssage, ParsedPacket -> None)
 
-import picamera
-import time
-import numpy as np
-
-ITERATIONS = 500
-
-with picamera.PiCamera() as camera:
-    # Set camera resolution (optional)
-    camera.resolution = (640, 480)
-    
-    # Warm-up the camera (optional, helps with exposure and white balance)
-    time.sleep(2)
-    
-    frame = np.empty((480, 640, 3), dtype=np.uint8)
-    t1 = time.time()
-    for n in range(ITERATIONS):
-        # Create a NumPy array to store the captured frame
+    # Handle recording (ParsedPacket[recording_switch] -> None)
+    # Start recording
+    if 'recording_switch_pressed':
+        # Get the current time
+        current_time = datetime.now()
+        time_string = current_time.strftime('%Y-%m-%d %H:%M:%S')
+        diagnostic_data = {
+            'metadata': {
+                'config': config.data,
+                'time': time_string,
+            }
+        }
         
-        # Capture the frame directly into the array
-        camera.capture(frame, 'rgb', use_video_port=True)
-        
+    # Stop recording
+    if 'recording_switch_released':
+        pass
+
+    # Wait a variable amount to maintain FPS
+    time_elapsed_so_far = time.time() - t1
+    addl_time_to_wait = LOOP_DURATION - time_elapsed_so_far
+    if addl_time_to_wait > 0:
+        time.sleep(addl_time_to_wait)
+
+    # Measure the FPS
     t2 = time.time()
-
-print(frame.shape)
-print(f'Time elapsed: {t2 - t1} seconds.')
-print(f'FPS: {ITERATIONS / (t2 - t1)}')
-
-
-# from horizon_detector.utils import read_and_flatten_yaml
-
-# # Read the configurations
-# path = "configurations.yaml"
-# config = read_and_flatten_yaml(path)
-# print(config)
+    # print(f'fps: {1 / (t2 - t1)}')
+    
+    # Restart the FPS timer
+    t1 = t2

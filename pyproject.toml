@@ -8,6 +8,9 @@ packages = [{include = "horizon_detector"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
+pigpio = "^1.78"
+bitarray = "^2.8.0"
+pyyaml = "^6.0.1"
 
 [build-system]
 requires = ["poetry-core"]

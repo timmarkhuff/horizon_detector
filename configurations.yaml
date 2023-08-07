@@ -1,30 +1,55 @@
 video:
   fps: 30
+  resolution:
+    capture:
+      width: 640
+      height: 480
+    inference: 
+      width: 100
+      height: 100
+
 receiver:
+  rpi:
+    input_pins:
+      sbus: 18
   channels:
-    primary:
+    sticks:
       ail: 1
       ele: 2
       thr: 3
       rud: 4
+    trim:
+      ail: 7
+      ele: 8
+      rud: 9
+    switches:
       rec: 5 # the recording switch
       auto: 6 # autopilot
-    trim:
-      ail: 6
-      ele: 7
-      rud: 8
   pwm:
     min: 172
     max: 1810 
-controls:
-  reversed:
-    ail: 0
-    ele: 0
-    rud: 0
-rpi:
-  input_pins:
-    sbus: 4
-  output_pins:
-    ail: 12
-    ele: 13
-    rud: 14
+  controls:
+    direction: # 1 for normal, -1 for reversed
+      ail: 1
+      ele: 1
+      rud: 1
+
+flight_controller:
+  rpi:
+    output_pins:
+      ail: 12
+      ele: 13
+      rud: 14
+  pid:
+    ail:
+      p: 0.019 # tested on AeroScout
+      # i: 0.0 # not currently using I or D. P seems sufficient
+      # d: 0.0 
+    ele:
+      p: 0.04 # tested on AeroScout
+      # i: 0.0 # not currently using I or D. P seems sufficient
+      # d: 0.0
+    # rud:
+      # p: 0.0 # not currently using using PID controller for rudder
+      # i: 0.0
+      # d: 0.0
