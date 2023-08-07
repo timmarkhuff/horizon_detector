@@ -1,4 +1,5 @@
 import yaml
+import json
 from datetime import datetime
 import time
 from receiver import Receiver
@@ -23,6 +24,11 @@ print('Connected to receiver!')
 
 # Initialize the camera
 
+# Initialize the switch positions to 0. We will keep track of when
+# they change position. 0 is considered the "off" or safe position.
+autopilot_switch_pos = 0
+recording_switch_pos = 0
+
 t1 = time.time() # Initialize the FPS timer
 while True:
     # Get the parsed SBUS packet (None -> ParsedPacket)
@@ -36,6 +42,9 @@ while True:
     # Run flight_controller (SensorMesssage, ParsedPacket -> None)
 
     # Handle recording (ParsedPacket[recording_switch] -> None)
+    if packet.switches.rec == 1 and recording_switch_pos != 0:
+        pass
+
     # Start recording
     if 'recording_switch_pressed':
         # Get the current time
