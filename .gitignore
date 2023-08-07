@@ -1,0 +1,16 @@
+# Ignore compiled Python files
+__pycache__/
+*.py[cod]
+
+# Ignore virtual environment directories
+venv/
+env/
+
+# Ignore the Poetry virtual environment
+.poetry/
+
+# Ignore the Poetry lock file
+poetry.lock
+
+# Ignore the Poetry cache
+.venv/
