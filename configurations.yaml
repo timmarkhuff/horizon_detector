@@ -48,8 +48,11 @@ receiver:
         channel: 2
         trim_channel: 8
         reversed: 1
-      ail:
+      thr:
         channel: 3
+        reversed: 1
+      rud:
+        channel: 4
         trim_channel: 9
         reversed: 1
     switches:

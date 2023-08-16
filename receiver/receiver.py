@@ -51,19 +51,19 @@ class Receiver:
         self.PWM_MAX = config.pwm.max
 
         # Sticks channels
-        self.ail_ch = config.channels.sticks.ail - 1
-        self.ele_ch = config.channels.sticks.ele - 1
-        self.thr_ch = config.channels.sticks.thr - 1
-        self.rud_ch = config.channels.sticks.rud - 1
+        self.ail_ch = config.controls.sticks.ail.channel - 1
+        self.ele_ch = config.controls.sticks.ele.channel - 1
+        self.thr_ch = config.controls.sticks.thr.channel - 1
+        self.rud_ch = config.controls.sticks.rud.channel - 1
 
         # Trim channels
-        self.ail_trim_ch = config.channels.trim.ail - 1
-        self.ele_trim_ch = config.channels.trim.ele - 1
-        self.rud_trim_ch = config.channels.trim.rud - 1
+        self.ail_trim_ch = config.controls.sticks.ail.trim_channel - 1
+        self.ele_trim_ch = config.controls.sticks.ele.trim_channel - 1
+        self.rud_trim_ch = config.controls.sticks.rud.trim_channel - 1
 
         # Switches channels
-        self.recording_switch_ch = config.channels.switches.rec - 1
-        self.autopilot_switch_ch = config.channels.switches.auto - 1
+        self.recording_switch_ch = config.controls.switches.rec.channel - 1
+        self.autopilot_switch_ch = config.controls.switches.auto.channel  - 1
 
         self.PWM_RANGE = config.pwm.max - config.pwm.min
 
@@ -88,7 +88,7 @@ class Receiver:
         """
         if pwm < self.PWM_MIN:
             ret_val =  -1
-        elif pwm > self.PWM_MIN:
+        elif pwm > self.PWM_MAX:
             ret_val = 1
         else:
             ret_val = (pwm - self.PWM_MIN) / self.PWM_RANGE * 2 - 1
