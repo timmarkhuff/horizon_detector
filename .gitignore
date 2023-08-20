@@ -6,6 +6,9 @@ __pycache__/
 venv/
 env/
 
+# Ignore video recordings and diagnostic data
+recordings/
+
 # Ignore the Poetry virtual environment
 .poetry/
 

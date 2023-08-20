@@ -1,38 +1,12 @@
 video:
   fps: 30
   resolution:
-    capture: # the resolution that will be captured and recorded
+    capture: # resolution that will be captured and recorded
       width: 640
       height: 480
-    inference: # the resolution sent to the horizon detector
+    inference: # resolution sent to the horizon detector
       width: 100
       height: 100
-
-# receiver:
-#   rpi:
-#     input_pins:
-#       sbus: 18
-#   channels:
-#     sticks:
-#       ail: 1
-#       ele: 2
-#       thr: 3
-#       rud: 4
-#     trim:
-#       ail: 7
-#       ele: 8
-#       rud: 9
-#     switches:
-#       rec: 5 # the recording switch
-#       auto: 6 # autopilot
-#   pwm:
-#     min: 172
-#     max: 1810 
-#   controls:
-#     direction: # 1 for normal, -1 for reversed
-#       ail: 1
-#       ele: 1
-#       rud: 1
 
 receiver:
   rpi:
@@ -51,6 +25,7 @@ receiver:
       thr:
         channel: 3
         reversed: 1
+        reversed: 0
       rud:
         channel: 4
         trim_channel: 9
@@ -62,20 +37,20 @@ receiver:
       auto:
         channel: 6
         num_positions: 2
+    trim_scaling: .1
   pwm:
     min: 172
-    max: 1810 
+    max: 1810
 
 flight_controller:
-  rpi:
-    output_pins:
-      ail: 12
-      ele: 13
-      rud: 14
+  output_pins:
+    ail: 12
+    ele: 13
+    rud: 14
   pid:
     ail:
       p: 0.019 # tested on AeroScout
-      # i: 0.0 # not currently using I or D. P seems sufficient
+      # i: 0.0 # not currently using I or D. P seems sufficient.
       # d: 0.0 
     ele:
       p: 0.04 # tested on AeroScout
