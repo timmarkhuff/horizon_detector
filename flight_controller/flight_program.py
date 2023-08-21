@@ -18,7 +18,7 @@ class FlightProgram(ABC):
     @abstractmethod
     def run(self, packet: Message, sensor_msg: Message) -> Tuple[bool, Message]:
         pass
-    
+
     def _restrict(self, value: float) -> float:
         if value < -1:
             return -1
@@ -26,6 +26,7 @@ class FlightProgram(ABC):
             return 1
         else:
             return value
+
 
 class ManualFlightProgram(FlightProgram):
     """User controls the aircraft

@@ -31,7 +31,7 @@ class Receiver:
         self.ail_trim_ch = config.controls.sticks.ail.trim_channel - 1
         self.ele_trim_ch = config.controls.sticks.ele.trim_channel - 1
         self.rud_trim_ch = config.controls.sticks.rud.trim_channel - 1
-        self.trim_scaling = config.controls.trim_scaling
+        self.trim_scaling = .3
 
         # Switches channels
         self.recording_switch_ch = config.controls.switches.rec.channel - 1

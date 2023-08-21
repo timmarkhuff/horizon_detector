@@ -37,7 +37,6 @@ receiver:
       auto:
         channel: 6
         num_positions: 2
-    trim_scaling: .1
   pwm:
     min: 172
     max: 1810
