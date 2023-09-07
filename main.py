@@ -9,6 +9,8 @@ from utils import Message, save_json_in_thread
 from flight_controller import FlightController, ManualFlightProgram, SurfaceCheckProgram, QuickWiggleProgram
 from video import CameraCapture, VideoRecorder
 
+from horizon_detector import HorizonDetector, get_cropping_and_scaling_parameters, crop_and_scale
+
 def main():
     # Read the configurations and convert to a Message object
     path = "configurations.yaml"
@@ -32,6 +34,15 @@ def main():
     initialization_packet = receiver.get_parsed_packet()
     print('Connected to receiver!')
 
+    # Initialize the horizon detector
+    INFERENCE_RESOLUTION = (100, 100)
+    RESOLUTION = frame.shape[1::-1] # extract the resolution from the frame
+    CROP_AND_SCALE_PARAM = get_cropping_and_scaling_parameters(RESOLUTION, INFERENCE_RESOLUTION)
+    EXCLUSION_THRESH = 5 # degrees of pitch above and below the horizon
+    FOV = 48.8
+    ACCEPTABLE_VARIANCE = 1.3 
+    horizon_detector = HorizonDetector(EXCLUSION_THRESH, FOV, ACCEPTABLE_VARIANCE, INFERENCE_RESOLUTION)
+
     # Initialize the flight controller
     flight_controller = FlightController(config.flight_controller)
 
@@ -53,6 +64,10 @@ def main():
         # print(packet)
 
         frame = camera_capture.read()
+
+        frame_small = crop_and_scale(frame, **CROP_AND_SCALE_PARAM)
+        output = horizon_detector.find_horizon(frame_small, diagnostic_mode=False)
+        print(output)
 
         # Perform horizon detection (frame -> Attitude/Horizon)
         sensor_msg = Message()
@@ -90,7 +105,7 @@ def main():
             json_filepath = f'{RECORDINGS_FOLDER_PATH}/{recording_start_time_string}.json'
             save_json_in_thread(json_filepath, diagnostic_data)
 
-            video_recorder.stop()
+            video_recorder.release()
 
         # Activate autopilot
         if packet.switches.auto == 1 and prev_autopilot_switch_pos != 1:
@@ -131,11 +146,12 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt as e:
-        print(e)
-    finally:
-        camera_capture.release()
-        video_recorder.release()
-        print('Resources released!')
+    main()
+    # try:
+    #     main()
+    # except KeyboardInterrupt as e:
+    #     print(e)
+    # finally:
+    #     camera_capture.release()
+    #     video_recorder.release()
+    #     print('Resources released!')

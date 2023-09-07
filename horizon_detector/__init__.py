@@ -1,1 +1,2 @@
-from .camera_capture import CameraCapture
+from .horizon_detector import HorizonDetector
+from .crop_and_scale import get_cropping_and_scaling_parameters, crop_and_scale
